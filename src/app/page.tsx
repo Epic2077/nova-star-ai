@@ -1,15 +1,17 @@
 import Hero from "@/components/landing/Hero";
 import Philosophy from "@/components/landing/Philosophy";
 import Feature from "@/components/landing/Feature";
+import DailyQuote from "@/components/landing/DailyQuote";
 
 export default function NovaLandingPage() {
   return (
     <div className="min-h-screen bg-linear-to-b from-background to-slate-100 text-slate-800">
       {/* Hero Section */}
       <Hero />
+      {/* Daily Quote Section */}
+      <DailyQuote />
       {/* Features Section */}
       <Feature />
-
       {/* Philosophy Section */}
       <Philosophy />
 
