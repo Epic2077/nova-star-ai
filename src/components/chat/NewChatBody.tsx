@@ -4,9 +4,9 @@ import { useState } from "react";
 import { Message } from "@/types/chat";
 
 import { useUser } from "@/hooks/useUser";
-import ChatInput from "./ChatInput";
+import NewChatInput from "./NewChatInput";
 
-const ChatBody = () => {
+const NewChatBody = () => {
   const { user } = useUser();
 
   const [message] = useState<Message[]>([]);
@@ -14,8 +14,8 @@ const ChatBody = () => {
 
   return (
     <section>
-      <ChatInput
-        user={user}
+      <NewChatInput
+        userInfo={user}
         input={input}
         setInput={setInput}
         message={message}
@@ -24,4 +24,4 @@ const ChatBody = () => {
   );
 };
 
-export default ChatBody;
+export default NewChatBody;

@@ -16,19 +16,22 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Spinner } from "./ui/spinner";
 
 export function NavProjects({
-  projects,
+  chats,
+  isLoading,
 }: {
-  projects: {
-    name: string;
-    url: string;
+  chats: {
+    title: string;
+    created_at: string;
+    id: string;
   }[];
+  isLoading: boolean;
 }) {
   const { isMobile } = useSidebar();
 
@@ -38,22 +41,30 @@ export function NavProjects({
         Your Chats
       </SidebarGroupLabel>
       <SidebarMenu className="gap-1">
-        {projects.map((item) => (
-          <SidebarMenuItem key={item.name}>
+        {isLoading ? (
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              <span>Loading chats...</span>
+            </div>
+          </SidebarMenuItem>
+        ) : null}
+        {chats.map((item) => (
+          <SidebarMenuItem key={item.id}>
             <SidebarMenuButton asChild>
               <Link
-                href={item.url}
-                className="group/chat flex items-center gap-2 rounded-lg px-2 py-6 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60"
+                href={`/chat/${item.id}`}
+                className="group/chat flex items-center gap-2 rounded-3xl px-2 py-6 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60"
               >
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Text className="size-4 text-foreground/60 group-hover/chat:text-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{item.name}</p>
+                    <p>{item.title}</p>
                   </TooltipContent>
                 </Tooltip>
-                <span className="truncate">{item.name}</span>
+                <span className="truncate">{item.title}</span>
               </Link>
             </SidebarMenuButton>
             <DropdownMenu>
@@ -69,8 +80,15 @@ export function NavProjects({
                 align={isMobile ? "end" : "start"}
               >
                 <DropdownMenuItem>
+                  <Trash2 className="text-muted-foreground" />
+                  <span>Rename Chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => window.open(`/chat/${item.id}`, "_blank")}
+                >
                   <Folder className="text-muted-foreground" />
-                  <span>View Chat</span>
+                  <span>View Chat In New Tab</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
@@ -80,7 +98,6 @@ export function NavProjects({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <SidebarSeparator />
           </SidebarMenuItem>
         ))}
       </SidebarMenu>

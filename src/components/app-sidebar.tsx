@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { Frame, Map, PieChart } from "lucide-react";
 
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
@@ -15,59 +14,52 @@ import {
 } from "@/components/ui/sidebar";
 import { useUser } from "@/hooks/useUser";
 import NewChat from "./ui/newChat";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
-
-// This is sample data.
-const falseData = {
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
-};
+import { Chat } from "@/types/chat";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user, isLoading } = useUser();
-  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
+  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
+  const [chatData, setChatData] = React.useState<Chat[]>([]);
+  const [isChatsLoading, setIsChatsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchChats = async () => {
+      if (!user?.id) {
+        setChatData([]);
+        setIsChatsLoading(false);
+        return;
+      }
+
+      setIsChatsLoading(true);
+
+      const { data, error } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (error) {
+        console.error("Error fetching chats:", error);
+        setIsChatsLoading(false);
+        return;
+      }
+      setChatData(data || []);
+      setIsChatsLoading(false);
+    };
+    fetchChats();
+  }, [user, supabase]);
 
   const handleNewChat = async () => {
     if (!user?.id) {
       toast.error("You need to be logged in to start a chat.");
-      router.push("/login");
+      window.location.href = "/login";
       return;
     }
 
-    const { data, error } = await supabase
-      .from("chats")
-      .insert([{ user_id: user.id, title: "New Chat" }])
-      .select();
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
-    if (!data || data.length === 0) {
-      toast.error("Failed to create a new chat.");
-      return;
-    }
-
-    router.push(`/chat/${(data[0] as { id: string }).id}`);
+    router.replace(`/chat`);
   };
 
   const navUser = user
@@ -89,7 +81,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <div onClick={handleNewChat}>
           <NewChat />
         </div>
-        <NavProjects projects={falseData.projects} />
+        <NavProjects chats={chatData} isLoading={isChatsLoading} />
       </SidebarContent>
       <SidebarFooter>
         {navUser ? <NavUser user={navUser} loading={isLoading} /> : null}
