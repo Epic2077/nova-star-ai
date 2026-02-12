@@ -58,6 +58,24 @@ const ChatHeader = () => {
     void fetchChatTitle();
   }, [chatId, supabase, user?.id]);
 
+  useEffect(() => {
+    const handleChatRenamed = (event: CustomEvent) => {
+      const { chatId: renamedChatId, newTitle } = event.detail;
+      if (renamedChatId === chatId) {
+        setChatTitle(newTitle);
+      }
+    };
+
+    window.addEventListener("chatRenamed", handleChatRenamed as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        "chatRenamed",
+        handleChatRenamed as EventListener,
+      );
+    };
+  }, [chatId]);
+
   return (
     <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 bg-chat-background">
       <div className="flex items-center gap-2 px-4">

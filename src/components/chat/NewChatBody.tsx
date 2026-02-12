@@ -13,7 +13,7 @@ const NewChatBody = () => {
   const [input, setInput] = useState("");
 
   return (
-    <section>
+    <section className="bg-chat-background h-[calc(100vh-65px)] overflow-hidden">
       <NewChatInput
         userInfo={user}
         input={input}

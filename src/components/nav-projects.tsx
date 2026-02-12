@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, MoreHorizontal, Text, Trash2 } from "lucide-react";
+import { Folder, MoreHorizontal, Pen, Text, Trash2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import { Spinner } from "./ui/spinner";
 export function NavProjects({
   chats,
   isLoading,
+  onRenameChat,
 }: {
   chats: {
     title: string;
@@ -32,6 +33,7 @@ export function NavProjects({
     id: string;
   }[];
   isLoading: boolean;
+  onRenameChat: (chatId: string, currentTitle: string) => void;
 }) {
   const { isMobile } = useSidebar();
 
@@ -79,8 +81,10 @@ export function NavProjects({
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >
-                <DropdownMenuItem>
-                  <Trash2 className="text-muted-foreground" />
+                <DropdownMenuItem
+                  onClick={() => onRenameChat(item.id, item.title)}
+                >
+                  <Pen className="text-muted-foreground" />
                   <span>Rename Chat</span>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />

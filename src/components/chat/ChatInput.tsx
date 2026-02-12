@@ -3,7 +3,6 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
-import type { Message } from "@/types/chat";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -12,10 +11,10 @@ interface ChatInputProps {
   //   userInfo: { user_metadata?: { full_name?: string } } | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
-  message: Message[];
+  onSubmit: () => Promise<void>;
 }
 
-const ChatInput = ({ input, setInput, message }: ChatInputProps) => {
+const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
   const maxTextareaHeight = 200;
   return (
     <div className="">
@@ -25,15 +24,14 @@ const ChatInput = ({ input, setInput, message }: ChatInputProps) => {
         transition={{ duration: 0.6 }}
         className="w-full px-4 "
       >
-        <div className="mx-auto w-full max-w-2xl rounded-2xl bg-chat-input shadow-xl">
+        <div className="mx-auto w-full max-w-4xl rounded-2xl bg-chat-input shadow-xl">
           <textarea
             value={input}
             rows={1}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
-              }
-              if (event.key === "Enter") {
+                void onSubmit();
               }
             }}
             onInput={(event) => {
@@ -45,7 +43,7 @@ const ChatInput = ({ input, setInput, message }: ChatInputProps) => {
               );
               target.style.height = `${nextHeight}px`;
             }}
-            className="w-full min-h-14 text-lg max-h-50 resize-none rounded-2xl px-6 pt-3 pb-2
+            className="w-full min-h-12 text-lg max-h-50 resize-none rounded-2xl px-6 pt-3 pb-2
               bg-transparent
               outline-none
               focus:outline-none 
@@ -71,12 +69,10 @@ const ChatInput = ({ input, setInput, message }: ChatInputProps) => {
             <Button
               variant="secondary"
               className="h-9 w-9 rounded-full shadow-lg cursor-pointer"
+              onClick={() => void onSubmit()}
+              disabled={input.trim().length === 0}
             >
-              <SendHorizontalIcon
-                size={18}
-                className="-rotate-90"
-                onClick={() => {}}
-              />
+              <SendHorizontalIcon size={18} className="-rotate-90" />
             </Button>
           </div>
         </div>
