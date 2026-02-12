@@ -16,6 +16,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
 import Link from "next/link";
@@ -79,6 +80,7 @@ export function NavProjects({
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <SidebarSeparator />
           </SidebarMenuItem>
         ))}
       </SidebarMenu>

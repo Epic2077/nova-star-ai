@@ -1,15 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  BookOpen,
-  Bot,
-  Frame,
-  Map,
-  PieChart,
-  Settings2,
-  SquareTerminal,
-} from "lucide-react";
+import { Frame, Map, PieChart } from "lucide-react";
 
 import { NavProjects } from "@/components/nav-projects";
 import { NavUser } from "@/components/nav-user";
@@ -23,96 +15,12 @@ import {
 } from "@/components/ui/sidebar";
 import { useUser } from "@/hooks/useUser";
 import NewChat from "./ui/newChat";
+import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 // This is sample data.
-const data = {
-  navMain: [
-    {
-      title: "Playground",
-      url: "#",
-      icon: SquareTerminal,
-      isActive: true,
-      items: [
-        {
-          title: "History",
-          url: "#",
-        },
-        {
-          title: "Starred",
-          url: "#",
-        },
-        {
-          title: "Settings",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Models",
-      url: "#",
-      icon: Bot,
-      items: [
-        {
-          title: "Genesis",
-          url: "#",
-        },
-        {
-          title: "Explorer",
-          url: "#",
-        },
-        {
-          title: "Quantum",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Documentation",
-      url: "#",
-      icon: BookOpen,
-      items: [
-        {
-          title: "Introduction",
-          url: "#",
-        },
-        {
-          title: "Get Started",
-          url: "#",
-        },
-        {
-          title: "Tutorials",
-          url: "#",
-        },
-        {
-          title: "Changelog",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Settings",
-      url: "#",
-      icon: Settings2,
-      items: [
-        {
-          title: "General",
-          url: "#",
-        },
-        {
-          title: "Team",
-          url: "#",
-        },
-        {
-          title: "Billing",
-          url: "#",
-        },
-        {
-          title: "Limits",
-          url: "#",
-        },
-      ],
-    },
-  ],
+const falseData = {
   projects: [
     {
       name: "Design Engineering",
@@ -133,7 +41,35 @@ const data = {
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const { user } = useUser();
+  const { user, isLoading } = useUser();
+  const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
+  const router = useRouter();
+
+  const handleNewChat = async () => {
+    if (!user?.id) {
+      toast.error("You need to be logged in to start a chat.");
+      router.push("/login");
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("chats")
+      .insert([{ user_id: user.id, title: "New Chat" }])
+      .select();
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast.error("Failed to create a new chat.");
+      return;
+    }
+
+    router.push(`/chat/${(data[0] as { id: string }).id}`);
+  };
+
   const navUser = user
     ? {
         full_name:
@@ -145,16 +81,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       }
     : null;
   return (
-    <Sidebar collapsible="icon" {...props}>
+    <Sidebar collapsible="icon" {...props} className="max-w-60">
       <SidebarHeader>
         <TeamSwitcher />
       </SidebarHeader>
       <SidebarContent>
-        <NewChat />
-        <NavProjects projects={data.projects} />
+        <div onClick={handleNewChat}>
+          <NewChat />
+        </div>
+        <NavProjects projects={falseData.projects} />
       </SidebarContent>
       <SidebarFooter>
-        {navUser ? <NavUser user={navUser} /> : null}
+        {navUser ? <NavUser user={navUser} loading={isLoading} /> : null}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

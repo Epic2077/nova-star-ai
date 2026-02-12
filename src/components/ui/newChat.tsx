@@ -12,7 +12,7 @@ const NewChat = () => {
   return (
     <SidebarGroup>
       <SidebarMenu className="my-5">
-        <SidebarMenuItem>
+        <SidebarMenuItem className="shadow-sm rounded-xl">
           <SidebarMenuButton asChild>
             <Link
               href=""

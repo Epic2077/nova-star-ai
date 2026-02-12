@@ -2,11 +2,10 @@
 
 import {
   BadgeCheck,
-  Bell,
   ChevronsUpDown,
-  CreditCard,
   LogOut,
-  Sparkles,
+  MoonIcon,
+  SunIcon,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,18 +26,24 @@ import {
 } from "@/components/ui/sidebar";
 import { useUser } from "@/hooks/useUser";
 import { toast } from "sonner";
+import { Skeleton } from "./ui/skeleton";
+import { Switch } from "./ui/switch";
+import { useTheme } from "next-themes";
 
 export function NavUser({
   user,
+  loading,
 }: {
   user: {
     full_name: string;
     email: string;
     avatar?: string;
   };
+  loading: boolean;
 }) {
   const { isMobile } = useSidebar();
   const { signOut } = useUser();
+  const { setTheme, theme } = useTheme();
 
   const handleLogout = async () => {
     try {
@@ -59,13 +64,29 @@ export function NavUser({
               size="lg"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >
-              <Avatar className="h-8 w-8 rounded-lg">
-                <AvatarImage src={user.avatar} alt={user.full_name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
-              </Avatar>
+              {loading ? (
+                <Skeleton className="h-8 w-8 rounded-full" />
+              ) : (
+                <Avatar className="h-8 w-8 rounded-lg">
+                  <AvatarImage src={user.avatar} alt={user.full_name} />
+                  <AvatarFallback className="rounded-lg">
+                    {user.full_name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              )}
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.full_name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+                {loading ? (
+                  <Skeleton className="h-4 w-37.5" />
+                ) : (
+                  <span className="truncate font-medium">{user.full_name}</span>
+                )}
+                {loading ? (
+                  <Skeleton className="h-3 w-25" />
+                ) : (
+                  <>
+                    <span className="truncate text-xs">{user.email}</span>
+                  </>
+                )}
               </div>
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
@@ -80,7 +101,9 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.full_name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">
+                    {user.full_name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.full_name}</span>
@@ -94,6 +117,28 @@ export function NavUser({
               <DropdownMenuItem>
                 <BadgeCheck />
                 Account
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={(e) => e.preventDefault()}>
+                {theme === "dark" ? (
+                  <>
+                    <MoonIcon />
+                    Dark Mode
+                  </>
+                ) : (
+                  <>
+                    <SunIcon />
+                    Light Mode
+                  </>
+                )}
+                <Switch
+                  className="ml-auto "
+                  defaultChecked={theme === "dark"}
+                  onCheckedChange={() =>
+                    setTheme(theme === "light" ? "dark" : "light")
+                  }
+                />
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />

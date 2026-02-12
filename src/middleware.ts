@@ -44,6 +44,9 @@ export async function middleware(request: NextRequest) {
   if (pathname.startsWith("/chat") && !isLoggedIn) {
     return NextResponse.redirect(new URL("/", request.url));
   }
+  if (pathname.startsWith("/login") && isLoggedIn) {
+    return NextResponse.redirect(new URL("/chat", request.url));
+  }
 
   return response;
 }
