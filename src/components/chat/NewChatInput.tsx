@@ -62,6 +62,8 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       return;
     }
 
+    const tempId = `tmp-${Date.now()}`;
+
     window.dispatchEvent(
       new CustomEvent("chatCreated", {
         detail: {
@@ -74,10 +76,23 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       }),
     );
 
+    // Optimistic UI: tell ChatBody about the user's pending message so it shows immediately
     // Navigate immediately - don't wait for AI response
     setInput("");
     router.push(`/chat/${data.id}`);
     setIsSubmitting(false);
+
+    // Dispatch optimistic message after navigation so ChatBody (mounted on /chat) receives it
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("optimisticMessage", {
+          detail: {
+            chatId: data.id,
+            message: { id: tempId, role: "user", content },
+          },
+        }),
+      );
+    }, 250);
 
     // Send the user's first message in the background (fire-and-forget)
     void fetch("/api/chat", {
@@ -89,9 +104,34 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
         useReferenceLayer: shouldUseReferenceLayer(content),
         useInsightLayer: shouldUseInsightLayer(content),
       }),
-    }).catch((err) => {
-      console.error("AI request failed:", err);
-    });
+    })
+      .then(async (resp) => {
+        if (!resp.ok) throw new Error("AI request failed");
+        const json = await resp.json().catch(() => ({}));
+
+        if (json?.reply) {
+          window.dispatchEvent(
+            new CustomEvent("assistantReply", {
+              detail: { chatId: data.id, content: json.reply },
+            }),
+          );
+        }
+
+        // server will insert messages and realtime subscription will update the UI
+        window.dispatchEvent(
+          new CustomEvent("messageSent", {
+            detail: { chatId: data.id, tempId },
+          }),
+        );
+      })
+      .catch(() => {
+        // inform ChatBody to replace the thinking indicator with a failed message
+        window.dispatchEvent(
+          new CustomEvent("messageFailed", {
+            detail: { chatId: data.id, tempId },
+          }),
+        );
+      });
 
     // Generate conversation title separately (first message only)
     void fetch("/api/chat/title", {

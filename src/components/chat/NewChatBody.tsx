@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Message } from "@/types/chat";
 
 import { useUser } from "@/hooks/useUser";
 import NewChatInput from "./NewChatInput";

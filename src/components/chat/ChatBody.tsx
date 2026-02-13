@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import ChatInput from "./ChatInput";
 import { Message, MessageRecord } from "@/types/chat";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
@@ -54,6 +55,8 @@ const ChatBody = () => {
   );
 
   React.useEffect(() => {
+    let channel: RealtimeChannel | null = null;
+
     const fetchMessages = async () => {
       if (!chatId) {
         setMessage([]);
@@ -78,10 +81,215 @@ const ChatBody = () => {
       }));
 
       setMessage(mapped);
+
+      // If the latest message is from the user and there's no assistant reply yet,
+      // show the typing indicator (covers initial-first-message case).
+      const last = mapped[mapped.length - 1];
+      if (last && last.role === "user") {
+        setIsAwaitingResponse(true);
+      } else {
+        setIsAwaitingResponse(false);
+      }
+
+      // subscribe to realtime message changes for this chat
+      try {
+        channel = supabase
+          .channel(`public:messages:chat_id=eq.${chatId}`)
+          .on(
+            "postgres_changes",
+            {
+              event: "INSERT",
+              schema: "public",
+              table: "messages",
+              filter: `chat_id=eq.${chatId}`,
+            },
+            (payload) => {
+              const row = payload.new as MessageRecord;
+
+              setMessage((prev) => {
+                // avoid duplicates
+                if (prev.some((m) => m.id === row.id)) return prev;
+
+                // remove optimistic temp user messages and any local "failed-" assistant placeholders
+                const cleaned = prev.filter((m) => {
+                  if (typeof m.id === "string") {
+                    if (
+                      m.id.startsWith("tmp-") &&
+                      m.role === row.role &&
+                      m.content === row.content
+                    ) {
+                      return false;
+                    }
+
+                    // when a real assistant row arrives, remove any prior failed/asst-temp placeholder
+                    if (
+                      (m.id.startsWith("failed-") ||
+                        m.id.startsWith("asst-temp-")) &&
+                      m.role === "assistant" &&
+                      row.role === "assistant"
+                    ) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+
+                return [
+                  ...cleaned,
+                  { id: row.id, content: row.content, role: row.role },
+                ];
+              });
+
+              if (row.role === "assistant") {
+                setIsAwaitingResponse(false);
+                setAnimatedAssistantId(row.id);
+              }
+
+              if (row.role === "user") {
+                // show typing indicator until assistant replies
+                setIsAwaitingResponse(true);
+              }
+            },
+          )
+          .subscribe();
+      } catch {
+        // ignore subscription errors
+      }
     };
 
     void fetchMessages();
+
+    return () => {
+      try {
+        channel?.unsubscribe();
+      } catch {
+        /* ignore */
+      }
+    };
   }, [chatId, supabase]);
+
+  // Listen for optimistic / failed message events from NewChatInput
+  React.useEffect(() => {
+    const handleOptimisticMessage = (event: Event) => {
+      const custom = event as CustomEvent<{
+        chatId?: string;
+        message?: Message;
+      }>;
+      const detail = custom.detail || {};
+      if (!detail.chatId || detail.chatId !== chatId || !detail.message) return;
+
+      setMessage((prev) => {
+        // avoid duplicates
+        if (prev.some((m) => m.id === detail.message!.id)) return prev;
+        return [...prev, detail.message!];
+      });
+      setIsAwaitingResponse(true);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scrollToBottom("smooth")),
+      );
+    };
+
+    const handleMessageFailed = (event: Event) => {
+      const custom = event as CustomEvent<{ chatId?: string; tempId?: string }>;
+      const failedChatId = custom.detail?.chatId;
+      if (!failedChatId || failedChatId !== chatId) return;
+
+      setIsAwaitingResponse(false);
+      const failedMsg: Message = {
+        id: `failed-${Date.now()}`,
+        role: "assistant",
+        content: "Failed to generate a response — please try again.",
+      };
+      setMessage((prev) => [...prev, failedMsg]);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scrollToBottom("smooth")),
+      );
+    };
+
+    const handleMessageSent = (event: Event) => {
+      const custom = event as CustomEvent<{ chatId?: string; tempId?: string }>;
+      const sentChatId = custom.detail?.chatId;
+      const tempId = custom.detail?.tempId as string | undefined;
+      if (!sentChatId || sentChatId !== chatId) return;
+
+      // clear any failed/asst-temp placeholders and optimistic temp user message with tempId
+      setMessage((prev) =>
+        prev.filter(
+          (m) =>
+            !(
+              typeof m.id === "string" &&
+              (m.id === tempId ||
+                m.id.startsWith("failed-") ||
+                m.id.startsWith("asst-temp-"))
+            ),
+        ),
+      );
+      setIsAwaitingResponse(true); // still awaiting assistant reply until DB insert arrives
+    };
+
+    const handleAssistantReply = (event: Event) => {
+      const custom = event as CustomEvent<{
+        chatId?: string;
+        content?: string;
+      }>;
+      const sentChatId = custom.detail?.chatId;
+      const content = custom.detail?.content;
+      if (!sentChatId || sentChatId !== chatId || !content) return;
+
+      const placeholderId = `asst-temp-${Date.now()}`;
+      const placeholder: Message = {
+        id: placeholderId,
+        role: "assistant",
+        content,
+      };
+
+      setMessage((prev) => {
+        // avoid duplicates by exact content
+        if (prev.some((m) => m.role === "assistant" && m.content === content))
+          return prev;
+        return [...prev, placeholder];
+      });
+
+      setAnimatedAssistantId(placeholderId);
+      setIsAwaitingResponse(false);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => scrollToBottom("smooth")),
+      );
+    };
+
+    window.addEventListener(
+      "optimisticMessage",
+      handleOptimisticMessage as EventListener,
+    );
+    window.addEventListener(
+      "messageFailed",
+      handleMessageFailed as EventListener,
+    );
+    window.addEventListener("messageSent", handleMessageSent as EventListener);
+    window.addEventListener(
+      "assistantReply",
+      handleAssistantReply as EventListener,
+    );
+
+    return () => {
+      window.removeEventListener(
+        "optimisticMessage",
+        handleOptimisticMessage as EventListener,
+      );
+      window.removeEventListener(
+        "messageFailed",
+        handleMessageFailed as EventListener,
+      );
+      window.removeEventListener(
+        "messageSent",
+        handleMessageSent as EventListener,
+      );
+      window.removeEventListener(
+        "assistantReply",
+        handleAssistantReply as EventListener,
+      );
+    };
+  }, [chatId, scrollToBottom]);
 
   const [isAwaitingResponse, setIsAwaitingResponse] = React.useState(false);
 
@@ -187,7 +395,14 @@ const ChatBody = () => {
       toast.error(
         err instanceof Error ? err.message : "Failed to get AI response",
       );
-      // keep optimistic user message when error occurs
+
+      // append a failed assistant message and remove the typing indicator
+      const failedMsg: Message = {
+        id: `failed-${Date.now()}`,
+        role: "assistant",
+        content: "Failed to generate a response — please try again.",
+      };
+      setMessage((prev) => [...prev, failedMsg]);
     } finally {
       setIsAwaitingResponse(false);
     }

@@ -6,7 +6,7 @@ function UserBubble({ content }: { content: string }) {
     <div className="flex justify-end">
       <div
         dir={rtl ? "rtl" : "ltr"}
-        className="mb-10 max-w-[70%] bg-chat-bubble text-neutral-900 px-4 py-3 rounded-2xl rounded-br-sm shadow-sm"
+        className="mb-10 max-w-[70%] bg-chat-bubble text-neutral-900 px-4 py-3 rounded-2xl rounded-br-sm shadow-sm whitespace-pre-wrap"
       >
         {content}
       </div>

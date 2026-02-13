@@ -64,6 +64,9 @@ export default function AssistantMessage({
 
   const rehypePlugins = [
     rehypeRaw,
+    // `rehype-sanitize` options cause a typing mismatch with the Pluggable[] signature —
+    // narrow suppression is used here because runtime behavior is correct.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [rehypeSanitize, sanitizeSchema] as any,
     rehypeKatex,
   ];
@@ -80,7 +83,7 @@ export default function AssistantMessage({
 
       await navigator.clipboard.writeText(text);
       toast.success("Copied to clipboard");
-    } catch (err) {
+    } catch {
       toast.error("Copy failed");
     }
   };
