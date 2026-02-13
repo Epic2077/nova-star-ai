@@ -67,7 +67,7 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
               focus:outline-none 
               transition-[height] duration-150 ease-out overflow-y-auto
               [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-            placeholder="How can I help you today?"
+            placeholder="Ask anything"
             onChange={(event) => setInput(event.target.value)}
           />
           <div className="flex items-center justify-between px-3 pb-3">

@@ -25,6 +25,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Copy } from "lucide-react";
+import { toast } from "sonner";
+import { useRef } from "react";
 
 export default function AssistantMessage({
   content,
@@ -58,17 +60,35 @@ export default function AssistantMessage({
 
   const rehypePlugins = [
     rehypeRaw,
-    rehypeKatex,
     [rehypeSanitize, sanitizeSchema] as any,
+    rehypeKatex,
   ];
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleCopy = async () => {
+    try {
+      const text = containerRef.current?.innerText ?? content ?? "";
+      if (!text) {
+        toast.error("Nothing to copy");
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch (err) {
+      toast.error("Copy failed");
+    }
+  };
 
   if (animate) {
     return (
       <motion.div
+        ref={containerRef}
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.36, ease: "easeOut" }}
-        className="mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
+        className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
       >
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
@@ -77,18 +97,30 @@ export default function AssistantMessage({
         >
           {content}
         </ReactMarkdown>
-        <Tooltip>
-          <TooltipTrigger>
-            <Copy size={20} className="text-foreground" />
-          </TooltipTrigger>
-          <TooltipContent>Copy</TooltipContent>
-        </Tooltip>
+
+        <div className="absolute right-2 top-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleCopy}
+                aria-label="Copy message"
+                className="rounded-full p-1 hover:bg-muted/60"
+              >
+                <Copy size={18} className="text-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
+          </Tooltip>
+        </div>
       </motion.div>
     );
   }
 
   return (
-    <div className="mb-10 leading-[1.8] text-[1.05rem] max-w-4xl">
+    <div
+      ref={containerRef}
+      className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
+    >
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
@@ -96,6 +128,21 @@ export default function AssistantMessage({
       >
         {content}
       </ReactMarkdown>
+
+      <div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleCopy}
+              aria-label="Copy message"
+              className="rounded-full p-1 hover:bg-muted/60"
+            >
+              <Copy size={18} className="text-foreground" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy</TooltipContent>
+        </Tooltip>
+      </div>
     </div>
   );
 }
