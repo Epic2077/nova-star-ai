@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { Skeleton } from "../ui/skeleton";
+import { TextAnimate } from "../ui/text-animate";
 
 const ChatHeader = () => {
   const { user, isLoading } = useUser();
@@ -77,7 +78,7 @@ const ChatHeader = () => {
   }, [chatId]);
 
   return (
-    <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 bg-chat-background">
+    <header className="sticky top-0 flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12 bg-chat-background">
       <div className="flex items-center gap-2 px-4">
         <SidebarTrigger className="-ml-1" />
         <Separator
@@ -91,7 +92,9 @@ const ChatHeader = () => {
                 {isLoading ? (
                   <Skeleton className="h-4 w-20 bg-muted" />
                 ) : (
-                  user?.user_metadata?.full_name || "User"
+                  <TextAnimate as="span" by="word" once animation="blurInUp">
+                    {String(user?.user_metadata?.full_name || "User")}
+                  </TextAnimate>
                 )}
               </BreadcrumbLink>
             </BreadcrumbItem>
@@ -101,7 +104,9 @@ const ChatHeader = () => {
                 {isChatTitleLoading ? (
                   <Skeleton className="h-4 w-20 bg-muted" />
                 ) : (
-                  chatTitle
+                  <TextAnimate as="span" by="word" once animation="blurInUp">
+                    {chatTitle}
+                  </TextAnimate>
                 )}
               </BreadcrumbPage>
             </BreadcrumbItem>

@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
+import { Spinner } from "../ui/spinner";
 
 interface ChatInputProps {
   userInfo: { user_metadata?: { full_name?: string } } | null;
@@ -21,17 +22,21 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const { user } = useUser();
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const handleNewChat = async () => {
     const content = input.trim();
 
-    if (!content) {
+    if (!content || isSubmitting) {
       return;
     }
+
+    setIsSubmitting(true);
 
     if (!user?.id) {
       toast.error("You need to be logged in to start a chat.");
       router.push("/login");
+      setIsSubmitting(false);
       return;
     }
 
@@ -43,13 +48,27 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
 
     if (error) {
       toast.error(error.message);
+      setIsSubmitting(false);
       return;
     }
 
     if (!data?.id) {
       toast.error("Failed to create a new chat.");
+      setIsSubmitting(false);
       return;
     }
+
+    window.dispatchEvent(
+      new CustomEvent("chatCreated", {
+        detail: {
+          chat: {
+            id: data.id,
+            title: "New Chat",
+            created_at: new Date().toISOString(),
+          },
+        },
+      }),
+    );
 
     // Send the user's first message to the server API so assistant reply is generated and persisted
     try {
@@ -60,9 +79,30 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       });
 
       const json = await resp.json();
-      if (!resp.ok || !json?.ok) {
+      if (!resp.ok || json?.error) {
         throw new Error(json?.error || "AI request failed");
       }
+
+      // generate conversation title separately (first message only)
+      void fetch("/api/chat/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
+      })
+        .then(async (titleResp) => {
+          if (!titleResp.ok) return;
+          const titleJson = await titleResp.json();
+          if (!titleJson?.title) return;
+
+          window.dispatchEvent(
+            new CustomEvent("chatRenamed", {
+              detail: { chatId: data.id, newTitle: titleJson.title },
+            }),
+          );
+        })
+        .catch(() => {
+          /* don't block user flow if title generation fails */
+        });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to contact AI");
       // still navigate to the chat even if AI failed
@@ -70,6 +110,7 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
 
     setInput("");
     router.push(`/chat/${data.id}`);
+    setIsSubmitting(false);
   };
 
   const maxTextareaHeight = 200;
@@ -94,8 +135,13 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
             <textarea
               value={input}
               rows={1}
+              disabled={isSubmitting}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  input.trim().length > 0
+                ) {
                   event.preventDefault();
                   void handleNewChat();
                 }
@@ -136,8 +182,13 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
                 variant="secondary"
                 className="h-9 w-9 rounded-full shadow-lg cursor-pointer"
                 onClick={() => void handleNewChat()}
+                disabled={!input.trim() || isSubmitting}
               >
-                <SendHorizontalIcon size={18} className="-rotate-90" />
+                {isSubmitting ? (
+                  <Spinner className="size-4" />
+                ) : (
+                  <SendHorizontalIcon size={18} className="-rotate-90" />
+                )}
               </Button>
             </div>
           </div>

@@ -16,6 +16,19 @@ interface ChatInputProps {
 
 const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
   const maxTextareaHeight = 200;
+  const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+
+  // Reset the textarea height to allow CSS `min-height` to take effect when
+  // the input is cleared (so it returns to the small default size).
+  React.useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    if (input.trim().length === 0) {
+      // remove programmatic height so CSS min-height applies
+      el.style.height = "auto";
+    }
+  }, [input]);
+
   return (
     <div className="">
       <motion.div
@@ -26,10 +39,15 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
       >
         <div className="mx-auto w-full max-w-4xl rounded-2xl bg-chat-input shadow-xl">
           <textarea
+            ref={textareaRef}
             value={input}
             rows={1}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              if (
+                event.key === "Enter" &&
+                !event.shiftKey &&
+                input.trim().length > 0
+              ) {
                 event.preventDefault();
                 void onSubmit();
               }

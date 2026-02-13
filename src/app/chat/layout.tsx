@@ -2,6 +2,7 @@ import React from "react";
 import ChatHeader from "@/components/chat/Header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
+import "katex/dist/katex.min.css";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (

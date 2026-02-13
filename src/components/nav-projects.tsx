@@ -21,11 +21,13 @@ import {
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Spinner } from "./ui/spinner";
+import { TextAnimate } from "./ui/text-animate";
 
 export function NavProjects({
   chats,
   isLoading,
   onRenameChat,
+  onChatDelete,
 }: {
   chats: {
     title: string;
@@ -34,6 +36,7 @@ export function NavProjects({
   }[];
   isLoading: boolean;
   onRenameChat: (chatId: string, currentTitle: string) => void;
+  onChatDelete: (chatId: string) => void;
 }) {
   const { isMobile } = useSidebar();
 
@@ -66,7 +69,15 @@ export function NavProjects({
                     <p>{item.title}</p>
                   </TooltipContent>
                 </Tooltip>
-                <span className="truncate">{item.title}</span>
+                <TextAnimate
+                  as="span"
+                  by="word"
+                  once
+                  animation="blurInUp"
+                  className="truncate"
+                >
+                  {item.title}
+                </TextAnimate>
               </Link>
             </SidebarMenuButton>
             <DropdownMenu>
@@ -96,7 +107,7 @@ export function NavProjects({
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onChatDelete(item.id)}>
                   <Trash2 className="text-muted-foreground" />
                   <span>Delete Chat</span>
                 </DropdownMenuItem>

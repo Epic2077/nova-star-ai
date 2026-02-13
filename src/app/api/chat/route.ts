@@ -1,116 +1,104 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-type Incoming = {
-  chatId: string;
-  content: string;
-  role?: "user" | "assistant";
-  provider?: "deepseek" | "openai"; // optional override
-  model?: string; // optional model name to forward to provider
-  systemPrompt?: string; // optional system instruction
-};
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
-const SUPABASE_KEY =
+/**
+ * ENV
+ */
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY =
   process.env.SUPABASE_SERVICE_ROLE_KEY ??
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  "";
-const OPENAI_KEY =
-  process.env.OPENAI_API_KEY ?? process.env.NEXT_PUBLIC_OPENAI_KEY ?? "";
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY ?? "";
-const DEEPSEEK_URL = process.env.DEEPSEEK_URL ?? "";
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const OPENAI_KEY = process.env.OPENAI_API_KEY;
 
-if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error(
-    "Supabase configuration missing: check NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_ANON_KEY",
-  );
-}
+const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+const DEEPSEEK_URL =
+  process.env.DEEPSEEK_API_URL ??
+  "https://api.deepseek.com/v1/chat/completions";
 
-export async function GET() {
-  return NextResponse.json({ ok: true, message: "Chat API available" });
-}
+/**
+ * Supabase Admin Client (server only)
+ */
+const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-export async function POST(req: Request) {
-  let body: Incoming;
-
+/**
+ * POST /api/chat
+ */
+export async function POST(req: NextRequest) {
   try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json(
-      { ok: false, error: "Invalid JSON" },
-      { status: 400 },
-    );
-  }
+    const {
+      content,
+      chatId,
+      provider = "deepseek", // default to deepseek for now
+      model,
+      systemPrompt,
+    } = await req.json();
 
-  const {
-    chatId,
-    content,
-    role = "user",
-    provider,
-    model,
-    systemPrompt,
-  } = body;
-  if (!chatId || !content) {
-    return NextResponse.json(
-      { ok: false, error: "Missing chatId or content" },
-      { status: 400 },
-    );
-  }
-
-  // insert the user message into Supabase
-  const { data: userMessage, error: insertError } = await supabase
-    .from("messages")
-    .insert([
-      {
-        chat_id: chatId,
-        content,
-        role,
-      },
-    ])
-    .select("id, chat_id, content, role, created_at")
-    .single();
-
-  if (insertError) {
-    console.error("Supabase insert error (messages):", insertError);
-    return NextResponse.json(
-      {
-        ok: false,
-        error:
-          insertError.message ||
-          insertError.details ||
-          JSON.stringify(insertError),
-      },
-      { status: 500 },
-    );
-  }
-
-  // If caller requested Deepseek explicitly or Deepseek is configured and preferred, call Deepseek
-  const shouldUseDeepseek =
-    provider === "deepseek" ||
-    (provider !== "openai" && DEEPSEEK_KEY && DEEPSEEK_URL);
-
-  if (shouldUseDeepseek) {
-    if (!DEEPSEEK_KEY || !DEEPSEEK_URL) {
+    if (!content || !chatId) {
       return NextResponse.json(
-        { ok: false, error: "Deepseek not configured on server" },
+        { error: "Missing content or chatId" },
+        { status: 400 },
+      );
+    }
+
+    /**
+     * 1️⃣ Get conversation history
+     */
+    const { data: history, error: historyError } = await supabase
+      .from("messages")
+      .select("role, content")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true });
+
+    if (historyError) {
+      console.error("History fetch error:", historyError);
+      return NextResponse.json(
+        { error: "Failed to fetch chat history" },
         { status: 500 },
       );
     }
 
-    try {
-      // forward model/systemPrompt when provided
-      const dsBody: Record<string, unknown> = { input: content };
-      if (model) {
-        dsBody.model = model;
-      } else {
-        dsBody.model = "deepseek-chat";
-      }
-      if (systemPrompt) {
-        dsBody.system_prompt = systemPrompt;
-      } else {
-        dsBody.system_prompt = "You are a helpful assistant.";
+    /**
+     * 2️⃣ Save user message
+     */
+    const { error: insertUserError } = await supabase.from("messages").insert({
+      chat_id: chatId,
+      role: "user",
+      content,
+    });
+
+    if (insertUserError) {
+      console.error("User insert error:", insertUserError);
+      return NextResponse.json(
+        { error: "Failed to save user message" },
+        { status: 500 },
+      );
+    }
+
+    /**
+     * 3️⃣ Build message array
+     */
+    const systemMsg =
+      systemPrompt ??
+      "You are a kind, warm, thoughtful, emotionally intelligent assistant. also try to use emoji to feel more human. When writing math: don't use [] or ()";
+
+    const messages = [
+      { role: "system", content: systemMsg },
+      ...(history ?? []),
+      { role: "user", content },
+    ];
+
+    /**
+     * 4️⃣ Call Provider
+     */
+    let assistantText = "";
+
+    if (provider === "deepseek") {
+      if (!DEEPSEEK_KEY) {
+        return NextResponse.json(
+          { error: "DeepSeek API key missing" },
+          { status: 500 },
+        );
       }
 
       const resp = await fetch(DEEPSEEK_URL, {
@@ -119,144 +107,90 @@ export async function POST(req: Request) {
           "Content-Type": "application/json",
           Authorization: `Bearer ${DEEPSEEK_KEY}`,
         },
-        body: JSON.stringify(dsBody),
+        body: JSON.stringify({
+          model: model ?? "deepseek-chat",
+          messages,
+          temperature: 0.7,
+        }),
       });
 
       if (!resp.ok) {
-        const txt = await resp.text();
-        return NextResponse.json({ ok: false, error: txt }, { status: 502 });
-      }
-
-      const payload = await resp.json();
-      // try common response shapes (allow provider to return 'output' or 'result' or nested array)
-      const assistantText =
-        payload.output ??
-        payload.result ??
-        payload.response ??
-        payload[0]?.output ??
-        payload[0]?.result ??
-        "";
-
-      const { data: assistantMessage, error: assistantInsertError } =
-        await supabase
-          .from("messages")
-          .insert([
-            {
-              chat_id: chatId,
-              content: assistantText,
-              role: "assistant",
-            },
-          ])
-          .select("id, chat_id, content, role, created_at")
-          .single();
-
-      if (assistantInsertError) {
-        console.error(
-          "Supabase insert error (assistant message):",
-          assistantInsertError,
-        );
+        const errorText = await resp.text();
+        console.error("DeepSeek error:", errorText);
         return NextResponse.json(
-          {
-            ok: false,
-            error:
-              assistantInsertError.message ||
-              assistantInsertError.details ||
-              JSON.stringify(assistantInsertError),
-          },
+          { error: "DeepSeek request failed" },
           { status: 500 },
         );
       }
 
-      return NextResponse.json({
-        ok: true,
-        provider: "deepseek",
-        model: model ?? null,
-        userMessage,
-        assistantMessage,
-      });
-    } catch {
-      return NextResponse.json(
-        { ok: false, error: "Deepseek request failed" },
-        { status: 500 },
-      );
-    }
-  }
+      const payload = await resp.json();
+      assistantText = payload.choices?.[0]?.message?.content ?? "";
+    } else {
+      /**
+       * OPENAI (modern Responses API)
+       * Safe for when you switch later
+       */
+      if (!OPENAI_KEY) {
+        return NextResponse.json(
+          { error: "OpenAI API key missing" },
+          { status: 500 },
+        );
+      }
 
-  // If we don't have an OpenAI key, return the stored message only
-  if (!OPENAI_KEY) {
-    return NextResponse.json({ ok: true, userMessage });
-  }
-
-  // call OpenAI ChatCompletion to get assistant reply
-  try {
-    const modelToUse = model ?? "gpt-3.5-turbo";
-    const systemMsg = systemPrompt ?? "You are a helpful assistant.";
-
-    const resp = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${OPENAI_KEY}`,
-      },
-      body: JSON.stringify({
-        model: modelToUse,
-        messages: [
-          { role: "system", content: systemMsg },
-          { role: "user", content },
-        ],
-        max_tokens: 800,
-      }),
-    });
-
-    if (!resp.ok) {
-      const txt = await resp.text();
-      return NextResponse.json({ ok: false, error: txt }, { status: 502 });
-    }
-
-    const payload = await resp.json();
-    const assistantText = payload?.choices?.[0]?.message?.content ?? "";
-
-    // persist assistant reply
-    const { data: assistantMessage, error: assistantInsertError } =
-      await supabase
-        .from("messages")
-        .insert([
-          {
-            chat_id: chatId,
-            content: assistantText,
-            role: "assistant",
-          },
-        ])
-        .select("id, chat_id, content, role, created_at")
-        .single();
-
-    if (assistantInsertError) {
-      console.error(
-        "Supabase insert error (assistant message):",
-        assistantInsertError,
-      );
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            assistantInsertError.message ||
-            assistantInsertError.details ||
-            JSON.stringify(assistantInsertError),
+      const resp = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${OPENAI_KEY}`,
         },
+        body: JSON.stringify({
+          model: model ?? "gpt-4.1-mini",
+          input: messages,
+          temperature: 0.7,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errorText = await resp.text();
+        console.error("OpenAI error:", errorText);
+        return NextResponse.json(
+          { error: "OpenAI request failed" },
+          { status: 500 },
+        );
+      }
+
+      const payload = await resp.json();
+      assistantText =
+        payload.output?.[0]?.content?.[0]?.text ?? payload.output_text ?? "";
+    }
+
+    /**
+     * 5️⃣ Save assistant reply
+     */
+    const { error: insertAssistantError } = await supabase
+      .from("messages")
+      .insert({
+        chat_id: chatId,
+        role: "assistant",
+        content: assistantText,
+      });
+
+    if (insertAssistantError) {
+      console.error("Assistant insert error:", insertAssistantError);
+      return NextResponse.json(
+        { error: "Failed to save assistant message" },
         { status: 500 },
       );
     }
 
-    return NextResponse.json({
-      ok: true,
-      provider: "openai",
-      model: modelToUse,
-      userMessage,
-      assistantMessage,
-    });
-  } catch {
+    /**
+     * 6️⃣ Return response
+     */
+    return NextResponse.json({ reply: assistantText });
+  } catch (err) {
+    console.error("Chat API error:", err);
     return NextResponse.json(
-      { ok: false, error: "AI request failed" },
+      { error: "Unexpected server error" },
       { status: 500 },
     );
   }

@@ -126,6 +126,45 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     };
   }, [user, supabase]);
 
+  React.useEffect(() => {
+    const handleChatCreated = (event: CustomEvent) => {
+      const chat = event.detail?.chat as Chat | undefined;
+      if (!chat?.id) return;
+
+      setChatData((previous) => [
+        chat,
+        ...previous.filter((item) => item.id !== chat.id),
+      ]);
+      setIsChatsLoading(false);
+    };
+
+    const handleChatRenamed = (event: CustomEvent) => {
+      const renamedChatId = event.detail?.chatId as string | undefined;
+      const newTitle = event.detail?.newTitle as string | undefined;
+      if (!renamedChatId || !newTitle) return;
+
+      setChatData((previous) =>
+        previous.map((chat) =>
+          chat.id === renamedChatId ? { ...chat, title: newTitle } : chat,
+        ),
+      );
+    };
+
+    window.addEventListener("chatCreated", handleChatCreated as EventListener);
+    window.addEventListener("chatRenamed", handleChatRenamed as EventListener);
+
+    return () => {
+      window.removeEventListener(
+        "chatCreated",
+        handleChatCreated as EventListener,
+      );
+      window.removeEventListener(
+        "chatRenamed",
+        handleChatRenamed as EventListener,
+      );
+    };
+  }, []);
+
   const handleNewChat = async () => {
     if (!user?.id) {
       toast.error("You need to be logged in to start a chat.");
@@ -184,6 +223,28 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setRenameDialog({ isOpen: false, chatId: "", currentTitle: "" });
   };
 
+  const handleChatDelete = async (chatId: string) => {
+    if (!user?.id) {
+      toast.error("You need to be logged in to delete a chat.");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("chats")
+      .delete()
+      .eq("id", chatId)
+      .eq("user_id", user.id);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    setChatData((previous) => previous.filter((chat) => chat.id !== chatId));
+
+    toast.success("Chat deleted");
+  };
+
   const navUser = user
     ? {
         full_name:
@@ -208,6 +269,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             chats={chatData}
             isLoading={isChatsLoading}
             onRenameChat={handleRenameChat}
+            onChatDelete={handleChatDelete}
           />
         </SidebarContent>
         <SidebarFooter>
