@@ -6,6 +6,10 @@ import type { Dispatch, SetStateAction } from "react";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import {
+  shouldUseReferenceLayer,
+  shouldUseInsightLayer,
+} from "@/lib/promptLayerDetection";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -70,47 +74,45 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       }),
     );
 
-    // Send the user's first message to the server API so assistant reply is generated and persisted
-    try {
-      const resp = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: data.id, content, role: "user" }),
-      });
-
-      const json = await resp.json();
-      if (!resp.ok || json?.error) {
-        throw new Error(json?.error || "AI request failed");
-      }
-
-      // generate conversation title separately (first message only)
-      void fetch("/api/chat/title", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
-      })
-        .then(async (titleResp) => {
-          if (!titleResp.ok) return;
-          const titleJson = await titleResp.json();
-          if (!titleJson?.title) return;
-
-          window.dispatchEvent(
-            new CustomEvent("chatRenamed", {
-              detail: { chatId: data.id, newTitle: titleJson.title },
-            }),
-          );
-        })
-        .catch(() => {
-          /* don't block user flow if title generation fails */
-        });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to contact AI");
-      // still navigate to the chat even if AI failed
-    }
-
+    // Navigate immediately - don't wait for AI response
     setInput("");
     router.push(`/chat/${data.id}`);
     setIsSubmitting(false);
+
+    // Send the user's first message in the background (fire-and-forget)
+    void fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chatId: data.id,
+        content,
+        useReferenceLayer: shouldUseReferenceLayer(content),
+        useInsightLayer: shouldUseInsightLayer(content),
+      }),
+    }).catch((err) => {
+      console.error("AI request failed:", err);
+    });
+
+    // Generate conversation title separately (first message only)
+    void fetch("/api/chat/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
+    })
+      .then(async (titleResp) => {
+        if (!titleResp.ok) return;
+        const titleJson = await titleResp.json();
+        if (!titleJson?.title) return;
+
+        window.dispatchEvent(
+          new CustomEvent("chatRenamed", {
+            detail: { chatId: data.id, newTitle: titleJson.title },
+          }),
+        );
+      })
+      .catch(() => {
+        /* don't block user flow if title generation fails */
+      });
   };
 
   const maxTextareaHeight = 200;

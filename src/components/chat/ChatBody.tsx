@@ -10,6 +10,10 @@ import { Button } from "../ui/button";
 import { ChevronDown } from "lucide-react";
 import MessageItem from "./message/Message";
 import TypingBubble from "./message/TypingBubble";
+import {
+  shouldUseReferenceLayer,
+  shouldUseInsightLayer,
+} from "@/lib/promptLayerDetection";
 
 const ChatBody = () => {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
@@ -110,7 +114,12 @@ const ChatBody = () => {
       const resp = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId, content, role: "user" }),
+        body: JSON.stringify({
+          chatId,
+          content,
+          useReferenceLayer: shouldUseReferenceLayer(content),
+          useInsightLayer: shouldUseInsightLayer(content),
+        }),
       });
 
       const json = await resp.json();

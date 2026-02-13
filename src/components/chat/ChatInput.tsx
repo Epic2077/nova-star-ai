@@ -6,6 +6,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import isRTL from "@/lib/rtlDetect";
 
 interface ChatInputProps {
   //   userInfo: { user_metadata?: { full_name?: string } } | null;
@@ -17,6 +18,7 @@ interface ChatInputProps {
 const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
   const maxTextareaHeight = 200;
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const rtl = isRTL(input);
 
   // Reset the textarea height to allow CSS `min-height` to take effect when
   // the input is cleared (so it returns to the small default size).
@@ -39,6 +41,7 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
       >
         <div className="mx-auto w-full max-w-4xl rounded-2xl bg-chat-input shadow-xl">
           <textarea
+            dir={rtl ? "rtl" : "ltr"}
             ref={textareaRef}
             value={input}
             rows={1}

@@ -23,4 +23,6 @@ export type Chat = {
   user_id: string;
   title: string;
   created_at: string;
+  memory_summary?: string | null;
+  memory_updated_at?: string | null;
 };
