@@ -1,6 +1,6 @@
 "use client";
 
-import { Folder, MoreHorizontal, Text, Trash2 } from "lucide-react";
+import { Folder, MoreHorizontal, Pen, Text, Trash2 } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -20,14 +20,23 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Spinner } from "./ui/spinner";
+import { TextAnimate } from "./ui/text-animate";
 
 export function NavProjects({
-  projects,
+  chats,
+  isLoading,
+  onRenameChat,
+  onChatDelete,
 }: {
-  projects: {
-    name: string;
-    url: string;
+  chats: {
+    title: string;
+    created_at: string;
+    id: string;
   }[];
+  isLoading: boolean;
+  onRenameChat: (chatId: string, currentTitle: string) => void;
+  onChatDelete: (chatId: string) => void;
 }) {
   const { isMobile } = useSidebar();
 
@@ -37,22 +46,38 @@ export function NavProjects({
         Your Chats
       </SidebarGroupLabel>
       <SidebarMenu className="gap-1">
-        {projects.map((item) => (
-          <SidebarMenuItem key={item.name}>
+        {isLoading ? (
+          <SidebarMenuItem>
+            <div className="flex items-center gap-2 rounded-xl px-3 py-3 text-sm text-muted-foreground">
+              <Spinner className="size-4" />
+              <span>Loading chats...</span>
+            </div>
+          </SidebarMenuItem>
+        ) : null}
+        {chats.map((item) => (
+          <SidebarMenuItem key={item.id}>
             <SidebarMenuButton asChild>
               <Link
-                href={item.url}
-                className="group/chat flex items-center gap-2 rounded-lg px-2 py-6 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60"
+                href={`/chat/${item.id}`}
+                className="group/chat flex items-center gap-2 rounded-3xl px-2 py-6 text-sm text-foreground/80 hover:bg-muted/60 hover:text-foreground focus-visible:bg-muted/60"
               >
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Text className="size-4 text-foreground/60 group-hover/chat:text-foreground" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>{item.name}</p>
+                    <p>{item.title}</p>
                   </TooltipContent>
                 </Tooltip>
-                <span className="truncate">{item.name}</span>
+                <TextAnimate
+                  as="span"
+                  by="word"
+                  once
+                  animation="blurInUp"
+                  className="truncate"
+                >
+                  {item.title}
+                </TextAnimate>
               </Link>
             </SidebarMenuButton>
             <DropdownMenu>
@@ -67,13 +92,22 @@ export function NavProjects({
                 side={isMobile ? "bottom" : "right"}
                 align={isMobile ? "end" : "start"}
               >
-                <DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onRenameChat(item.id, item.title)}
+                >
+                  <Pen className="text-muted-foreground" />
+                  <span>Rename Chat</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => window.open(`/chat/${item.id}`, "_blank")}
+                >
                   <Folder className="text-muted-foreground" />
-                  <span>View Chat</span>
+                  <span>View Chat In New Tab</span>
                 </DropdownMenuItem>
 
                 <DropdownMenuSeparator />
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onChatDelete(item.id)}>
                   <Trash2 className="text-muted-foreground" />
                   <span>Delete Chat</span>
                 </DropdownMenuItem>

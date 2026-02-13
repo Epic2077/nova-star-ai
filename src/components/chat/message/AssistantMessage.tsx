@@ -1,0 +1,148 @@
+"use client";
+
+import ReactMarkdown from "react-markdown";
+
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import remarkDeflist from "remark-deflist";
+import remarkSupersub from "remark-supersub";
+import remarkAbbr from "@syenchuk/remark-abbr";
+import remarkEmoji from "remark-emoji";
+import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
+import remarkDirective from "remark-directive";
+
+import rehypeKatex from "rehype-katex";
+import rehypeRaw from "rehype-raw";
+
+import "katex/dist/katex.min.css";
+
+import { useTheme } from "next-themes";
+import { createMarkdownComponents } from "@/constant/markDown";
+import { motion } from "motion/react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Copy } from "lucide-react";
+import { toast } from "sonner";
+import { useRef } from "react";
+
+export default function AssistantMessage({
+  content,
+  animate,
+}: {
+  content: string;
+  animate?: boolean;
+}) {
+  const { theme } = useTheme();
+
+  const sanitizeSchema = {
+    ...defaultSchema,
+    attributes: {
+      ...defaultSchema.attributes,
+      div: [...(defaultSchema.attributes?.div || []), "style"],
+      span: [...(defaultSchema.attributes?.span || []), "style"],
+      kbd: ["className"],
+      mark: ["className"],
+    },
+  };
+
+  const remarkPlugins = [
+    remarkGfm,
+    remarkMath,
+    remarkDeflist,
+    remarkAbbr,
+    remarkSupersub,
+    remarkDirective,
+    remarkEmoji,
+  ];
+
+  const rehypePlugins = [
+    rehypeRaw,
+    [rehypeSanitize, sanitizeSchema] as any,
+    rehypeKatex,
+  ];
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
+
+  const handleCopy = async () => {
+    try {
+      const text = containerRef.current?.innerText ?? content ?? "";
+      if (!text) {
+        toast.error("Nothing to copy");
+        return;
+      }
+
+      await navigator.clipboard.writeText(text);
+      toast.success("Copied to clipboard");
+    } catch (err) {
+      toast.error("Copy failed");
+    }
+  };
+
+  if (animate) {
+    return (
+      <motion.div
+        ref={containerRef}
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.36, ease: "easeOut" }}
+        className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
+      >
+        <ReactMarkdown
+          remarkPlugins={remarkPlugins}
+          rehypePlugins={rehypePlugins}
+          components={createMarkdownComponents({ theme })}
+        >
+          {content}
+        </ReactMarkdown>
+
+        <div className="absolute right-2 top-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleCopy}
+                aria-label="Copy message"
+                className="rounded-full p-1 hover:bg-muted/60"
+              >
+                <Copy size={18} className="text-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Copy</TooltipContent>
+          </Tooltip>
+        </div>
+      </motion.div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
+    >
+      <ReactMarkdown
+        remarkPlugins={remarkPlugins}
+        rehypePlugins={rehypePlugins}
+        components={createMarkdownComponents({ theme })}
+      >
+        {content}
+      </ReactMarkdown>
+
+      <div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleCopy}
+              aria-label="Copy message"
+              className="rounded-full p-1 hover:bg-muted/60"
+            >
+              <Copy size={18} className="text-foreground" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Copy</TooltipContent>
+        </Tooltip>
+      </div>
+    </div>
+  );
+}
