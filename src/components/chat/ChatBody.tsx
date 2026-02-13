@@ -50,40 +50,64 @@ const ChatBody = () => {
     void fetchMessages();
   }, [chatId, supabase]);
 
+  const [isAwaitingResponse, setIsAwaitingResponse] = React.useState(false);
+
   const handleSubmit = async () => {
     const content = input.trim();
 
-    if (!chatId || !content) {
-      return;
-    }
+    if (!chatId || !content) return;
 
-    const { data, error } = await supabase
-      .from("messages")
-      .insert([
-        {
-          chat_id: chatId,
-          content,
-          role: "user",
-        },
-      ])
-      .select("id, content, role")
-      .single();
-
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-
+    // optimistic user message (temporary id)
+    const tempId = `tmp-${Date.now()}`;
     setMessage((previous) => [
       ...previous,
-      {
-        id: data.id,
-        content: data.content,
-        role: data.role,
-      },
+      { id: tempId, content, role: "user" },
     ]);
 
     setInput("");
+    setIsAwaitingResponse(true);
+
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId, content, role: "user" }),
+      });
+
+      const json = await resp.json();
+      if (!resp.ok || !json?.ok) {
+        throw new Error(json?.error || "AI request failed");
+      }
+
+      // remove temporary message and append persisted user + assistant messages
+      setMessage((previous) => {
+        const withoutTemp = previous.filter((m) => m.id !== tempId);
+        // append server userMessage (if present)
+        if (json.userMessage) {
+          withoutTemp.push({
+            id: json.userMessage.id,
+            content: json.userMessage.content,
+            role: json.userMessage.role,
+          });
+        }
+        // append assistantMessage (if present)
+        if (json.assistantMessage) {
+          withoutTemp.push({
+            id: json.assistantMessage.id,
+            content: json.assistantMessage.content,
+            role: json.assistantMessage.role,
+          });
+        }
+        return withoutTemp;
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to get AI response",
+      );
+      // keep optimistic user message when error occurs
+    } finally {
+      setIsAwaitingResponse(false);
+    }
   };
 
   // Scrolling behavior:
@@ -138,6 +162,20 @@ const ChatBody = () => {
             <MessageItem message={item} />
           </div>
         ))}
+        {isAwaitingResponse ? (
+          <div>
+            {/* typing bubble shown while awaiting assistant response */}
+            <div className="mb-2">
+              <div className="flex justify-start">
+                <div className="bg-muted/80 text-muted-foreground px-4 py-2 rounded-2xl rounded-bl-sm shadow-sm inline-flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-foreground/60 animate-pulse delay-75" />
+                  <span className="w-2 h-2 rounded-full bg-foreground/60 animate-pulse delay-150" />
+                  <span className="w-2 h-2 rounded-full bg-foreground/60 animate-pulse delay-200" />
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}{" "}
       </div>
 
       <div className="mt-auto sticky bottom-5">

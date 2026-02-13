@@ -43,13 +43,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [newTitle, setNewTitle] = React.useState("");
 
   React.useEffect(() => {
-    const fetchChats = async () => {
-      if (!user?.id) {
-        setChatData([]);
-        setIsChatsLoading(false);
-        return;
-      }
+    if (!user?.id) {
+      setChatData([]);
+      setIsChatsLoading(false);
+      return;
+    }
 
+    let isMounted = true;
+    const fetchChats = async () => {
       setIsChatsLoading(true);
 
       const { data, error } = await supabase
@@ -59,13 +60,70 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         .order("created_at", { ascending: false });
       if (error) {
         console.error("Error fetching chats:", error);
-        setIsChatsLoading(false);
+        if (isMounted) setIsChatsLoading(false);
         return;
       }
-      setChatData(data || []);
-      setIsChatsLoading(false);
+
+      if (isMounted) {
+        setChatData(data || []);
+        setIsChatsLoading(false);
+      }
     };
-    fetchChats();
+
+    void fetchChats();
+
+    // realtime updates for chats (insert / update / delete)
+    const channel = supabase
+      .channel(`public:chats:user_id=eq.${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "chats",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Chat;
+          setChatData((prev) => [row, ...prev.filter((c) => c.id !== row.id)]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "chats",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Chat;
+          setChatData((prev) => prev.map((c) => (c.id === row.id ? row : c)));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "chats",
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const oldRow = payload.old as Chat;
+          setChatData((prev) => prev.filter((c) => c.id !== oldRow.id));
+        },
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      try {
+        channel.unsubscribe();
+      } catch {
+        // ignore
+      }
+    };
   }, [user, supabase]);
 
   const handleNewChat = async () => {

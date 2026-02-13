@@ -3,7 +3,6 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
-import type { Message } from "@/types/chat";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
@@ -16,15 +15,9 @@ interface ChatInputProps {
   userInfo: { user_metadata?: { full_name?: string } } | null;
   input: string;
   setInput: Dispatch<SetStateAction<string>>;
-  message: Message[];
 }
 
-const NewChatInput = ({
-  userInfo,
-  input,
-  setInput,
-  message,
-}: ChatInputProps) => {
+const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const { user } = useUser();
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
@@ -58,20 +51,21 @@ const NewChatInput = ({
       return;
     }
 
-    const { error: messageError } = await supabase
-      .from("messages")
-      .insert([
-        {
-          chat_id: data.id,
-          content,
-          role: "user",
-        },
-      ])
-      .select("id");
+    // Send the user's first message to the server API so assistant reply is generated and persisted
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId: data.id, content, role: "user" }),
+      });
 
-    if (messageError) {
-      toast.error(messageError.message);
-      return;
+      const json = await resp.json();
+      if (!resp.ok || !json?.ok) {
+        throw new Error(json?.error || "AI request failed");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to contact AI");
+      // still navigate to the chat even if AI failed
     }
 
     setInput("");
