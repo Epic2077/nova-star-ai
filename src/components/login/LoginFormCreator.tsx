@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { BackgroundBeams } from "../ui/background-beams";
+import { useTheme } from "next-themes";
 
 export function LoginFormCreator({
   className,
@@ -29,7 +30,11 @@ export function LoginFormCreator({
   const router = useRouter();
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const { setTheme } = useTheme();
 
+  React.useEffect(() => {
+    setTheme("dark");
+  }, [setTheme]);
   const handleAdminLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isSubmitting) return;

@@ -8,6 +8,7 @@ import { description, name } from "@/constant/landing";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Switch } from "../ui/switch";
+import { HoverBorderGradient } from "../ui/hover-border-gradient";
 
 const Hero = () => {
   const { resolvedTheme, setTheme } = useTheme();
@@ -89,9 +90,9 @@ const Hero = () => {
 
           <Link href="/login/creator">
             <Button
-              size="lg"
               variant="outline"
-              className="rounded-2xl px-8 text-foreground"
+              size="lg"
+              className="rounded-2xl px-8 bg-transparent border-2 border-muted shadow-lg"
             >
               Creator Portal
             </Button>

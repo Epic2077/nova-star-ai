@@ -17,6 +17,8 @@ import {
   CreatorAdminProvider,
   useCreatorAdmin,
 } from "@/components/creator/CreatorAdminContext";
+import { useUser } from "@/hooks/useUser";
+import { toast } from "sonner";
 
 function CreatorLookupBar() {
   const { email, setEmail, isLoading, lookupByEmail } = useCreatorAdmin();
@@ -60,27 +62,44 @@ export default function CreatorLayout({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { signOut } = useUser();
 
   const currentTab = pathname.startsWith("/creator/chats") ? "chats" : "user";
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      window.location.href = "/";
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to log out.";
+      toast.error(message);
+    }
+  };
 
   return (
     <TooltipProvider>
       <CreatorAdminProvider>
         <main className="min-h-screen p-6 md:p-10 bg-background text-foreground">
           <div className="mx-auto max-w-6xl space-y-6">
-            <Tabs
-              value={currentTab}
-              onValueChange={(value) => {
-                router.push(
-                  value === "chats" ? "/creator/chats" : "/creator/user",
-                );
-              }}
-            >
-              <TabsList variant="default">
-                <TabsTrigger value="user">User & Profile</TabsTrigger>
-                <TabsTrigger value="chats">Chats</TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex justify-between items-center">
+              <Tabs
+                value={currentTab}
+                onValueChange={(value) => {
+                  router.push(
+                    value === "chats" ? "/creator/chats" : "/creator/user",
+                  );
+                }}
+              >
+                <TabsList variant="default">
+                  <TabsTrigger value="user">User & Profile</TabsTrigger>
+                  <TabsTrigger value="chats">Chats</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Button variant="outline" onClick={handleLogout}>
+                Logout
+              </Button>
+            </div>
 
             <CreatorLookupBar />
 
