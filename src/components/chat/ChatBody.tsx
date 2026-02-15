@@ -212,19 +212,23 @@ const ChatBody = () => {
       const tempId = custom.detail?.tempId as string | undefined;
       if (!sentChatId || sentChatId !== chatId) return;
 
-      // clear any failed/asst-temp placeholders and optimistic temp user message with tempId
-      setMessage((prev) =>
-        prev.filter(
+      // clear failed placeholders and optimistic temp user message with tempId.
+      // keep any "asst-temp-" placeholder visible until realtime inserts the real assistant row.
+      setMessage((prev) => {
+        const filtered = prev.filter(
           (m) =>
             !(
               typeof m.id === "string" &&
-              (m.id === tempId ||
-                m.id.startsWith("failed-") ||
-                m.id.startsWith("asst-temp-"))
+              (m.id === tempId || m.id.startsWith("failed-"))
             ),
-        ),
-      );
-      setIsAwaitingResponse(true); // still awaiting assistant reply until DB insert arrives
+        );
+
+        // if an assistant message (real or placeholder) already exists, don't show the typing indicator
+        const hasAssistant = filtered.some((m) => m.role === "assistant");
+        setIsAwaitingResponse(!hasAssistant);
+
+        return filtered;
+      });
     };
 
     const handleAssistantReply = (event: Event) => {

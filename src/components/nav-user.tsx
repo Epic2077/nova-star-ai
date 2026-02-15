@@ -48,6 +48,7 @@ export function NavUser({
   const handleLogout = async () => {
     try {
       await signOut();
+      window.location.href = "/";
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to log out.";

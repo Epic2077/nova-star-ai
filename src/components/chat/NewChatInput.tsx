@@ -110,11 +110,14 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
         const json = await resp.json().catch(() => ({}));
 
         if (json?.reply) {
-          window.dispatchEvent(
-            new CustomEvent("assistantReply", {
-              detail: { chatId: data.id, content: json.reply },
-            }),
-          );
+          // delay assistantReply slightly so the chat page mounts and begins listening
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("assistantReply", {
+                detail: { chatId: data.id, content: json.reply },
+              }),
+            );
+          }, 350);
         }
 
         // server will insert messages and realtime subscription will update the UI
