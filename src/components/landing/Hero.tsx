@@ -1,5 +1,6 @@
 "use client";
 
+import React from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { HeartIcon, MoonIcon, SunIcon } from "lucide-react";
@@ -9,27 +10,35 @@ import { useTheme } from "next-themes";
 import { Switch } from "../ui/switch";
 
 const Hero = () => {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
+  const [mounted, setMounted] = React.useState(false);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <section className="relative max-w-6xl mx-auto px-6 py-24 pb-10 text-center overflow-hidden text-foreground">
       {/* top-right theme control */}
       <div className="absolute right-6 top-6 z-20 flex items-center gap-3 bg-muted/40 backdrop-blur rounded-full px-3 py-1 shadow-sm">
         <motion.div
-          key={theme}
+          key={mounted ? resolvedTheme : "not-mounted"}
           initial={{ rotate: -10, scale: 0.9, opacity: 0 }}
           animate={{ rotate: 0, scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 20 }}
           aria-hidden
           className="text-foreground"
         >
-          {theme === "dark" ? <MoonIcon size={16} /> : <SunIcon size={16} />}
+          {isDark ? <MoonIcon size={16} /> : <SunIcon size={16} />}
         </motion.div>
 
         <Switch
           aria-label="Toggle color theme"
-          defaultChecked={theme === "dark"}
-          onCheckedChange={() => setTheme(theme === "light" ? "dark" : "light")}
+          checked={isDark}
+          disabled={!mounted}
+          onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
         />
       </div>
 
@@ -49,7 +58,7 @@ const Hero = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 via-pink-500 to-amber-400"
+          className="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-linear-to-r from-indigo-600 via-pink-500 to-amber-400"
         >
           {name}
         </motion.h1>

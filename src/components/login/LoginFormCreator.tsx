@@ -20,6 +20,7 @@ import {
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { BackgroundBeams } from "../ui/background-beams";
 
 export function LoginFormCreator({
   className,
@@ -27,9 +28,12 @@ export function LoginFormCreator({
 }: React.ComponentProps<"div">) {
   const router = useRouter();
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const handleAdminLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isSubmitting) return;
+
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") || "");
     const password = String(formData.get("password") || "");
@@ -39,6 +43,8 @@ export function LoginFormCreator({
       return;
     }
 
+    setIsSubmitting(true);
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -46,41 +52,43 @@ export function LoginFormCreator({
 
     if (error) {
       toast.error(error.message);
+      setIsSubmitting(false);
       return;
     }
 
-    const { data } = await supabase.auth.getUser();
-    const role = data.user?.user_metadata?.role;
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("role")
+      .single();
+
+    if (profileError) {
+      await supabase.auth.signOut();
+      toast.error("Could not verify admin access.");
+      setIsSubmitting(false);
+      return;
+    }
+
+    const role = profile?.role;
 
     if (role !== "admin") {
       await supabase.auth.signOut();
       toast.error("Admin access required.");
+      setIsSubmitting(false);
       return;
     }
 
-    router.push("/admin");
-  };
-
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/admin`,
-      },
-    });
-
-    if (error) {
-      toast.error(error.message);
-    }
+    router.replace("/creator");
+    router.refresh();
+    setIsSubmitting(false);
   };
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
+      <Card className="z-10">
         <CardHeader>
-          <CardTitle>Login to your account</CardTitle>
+          <CardTitle>Login to your creator portal</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Enter your email below to login to your admin account
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -99,24 +107,20 @@ export function LoginFormCreator({
               <Field>
                 <div className="flex items-center">
                   <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <a
-                    href="#"
-                    className="ml-auto inline-block text-sm underline-offset-4 hover:underline"
-                  >
-                    Forgot your password?
-                  </a>
                 </div>
-                <Input id="password" type="password" required />
+                <Input
+                  id="password"
+                  name="password"
+                  type="password"
+                  placeholder="***********"
+                  required
+                />
               </Field>
               <Field>
-                <Button type="submit">Login</Button>
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={handleGoogleLogin}
-                >
-                  Login with Google
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Checking..." : "Login"}
                 </Button>
+
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <a href="#">Sign up</a>
                 </FieldDescription>
@@ -125,6 +129,7 @@ export function LoginFormCreator({
           </form>
         </CardContent>
       </Card>
+      <BackgroundBeams />
     </div>
   );
 }
