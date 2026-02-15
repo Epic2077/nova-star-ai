@@ -37,20 +37,44 @@ export async function middleware(request: NextRequest) {
   const isLoggedIn = Boolean(user);
   const { pathname } = request.nextUrl;
 
-  if (pathname === "/" && isLoggedIn) {
-    return NextResponse.redirect(new URL("/chat", request.url));
-  }
-
   if (pathname.startsWith("/chat") && !isLoggedIn) {
     return NextResponse.redirect(new URL("/", request.url));
   }
-  if (pathname.startsWith("/login") && isLoggedIn) {
+
+  if (
+    (pathname.startsWith("/login") || pathname.startsWith("/signup")) &&
+    isLoggedIn
+  ) {
     return NextResponse.redirect(new URL("/chat", request.url));
+  }
+
+  if (pathname.startsWith("/creator")) {
+    if (!isLoggedIn) {
+      return NextResponse.redirect(new URL("/login/creator", request.url));
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user?.id)
+      .single();
+
+    const role = profile?.role;
+
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL("/chat?adminDenied=1", request.url));
+    }
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/", "/chat/:path*"],
+  matcher: [
+    "/",
+    "/chat/:path*",
+    "/login/:path*",
+    "/signup/:path*",
+    "/creator/:path*",
+  ],
 };

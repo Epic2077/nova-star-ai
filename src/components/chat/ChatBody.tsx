@@ -5,7 +5,12 @@ import ChatInput from "./ChatInput";
 import { Message, MessageRecord } from "@/types/chat";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { useParams } from "next/navigation";
+import {
+  useParams,
+  usePathname,
+  useRouter,
+  useSearchParams,
+} from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
 import { ChevronDown } from "lucide-react";
@@ -18,6 +23,9 @@ import {
 
 const ChatBody = () => {
   const supabase = useMemo(() => createSupabaseBrowserClient(), []);
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const params = useParams<{ dataId?: string }>();
   const chatId = params?.dataId;
 
@@ -33,6 +41,17 @@ const ChatBody = () => {
   const hasAutoScrolledRef = React.useRef<string | null>(null);
 
   const [showScrollToBottom, setShowScrollToBottom] = React.useState(false);
+
+  React.useEffect(() => {
+    if (searchParams.get("adminDenied") !== "1") return;
+
+    toast.error("You don’t have access to the admin panel.");
+
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("adminDenied");
+    const nextQuery = next.toString();
+    router.replace(nextQuery ? `${pathname}?${nextQuery}` : pathname);
+  }, [searchParams, router, pathname]);
 
   const scrollToBottom = React.useCallback(
     (behavior: ScrollBehavior = "smooth") => {

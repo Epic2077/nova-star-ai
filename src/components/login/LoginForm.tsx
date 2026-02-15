@@ -83,7 +83,7 @@ export function LoginForm({
                 <Button
                   variant="outline"
                   type="button"
-                  className="bg-primary"
+                  className="bg-primary cursor-pointer"
                   onClick={handleGoogleLogin}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
@@ -131,7 +131,10 @@ export function LoginForm({
                 />
               </Field>
               <Field>
-                <Button type="submit" className="text-white">
+                <Button
+                  type="submit"
+                  className="text-primary-foreground cursor-pointer"
+                >
                   Login
                 </Button>
                 <FieldDescription className="text-center text-foreground">
