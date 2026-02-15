@@ -5,7 +5,7 @@ import DailyQuote from "@/components/landing/DailyQuote";
 
 export default function NovaLandingPage() {
   return (
-    <div className="min-h-screen bg-linear-to-b from-background to-slate-100 text-slate-800">
+    <div className="min-h-screen bg-linear-to-b from-background dark:from-background to-slate-100 dark:to-muted text-slate-800 dark:text-foreground">
       {/* Hero Section */}
       <Hero />
       {/* Daily Quote Section */}
@@ -16,7 +16,7 @@ export default function NovaLandingPage() {
       <Philosophy />
 
       {/* Footer */}
-      <footer className="py-10 text-center text-sm text-slate-500">
+      <footer className="py-10 text-center text-sm text-slate-500 dark:text-foreground">
         © {new Date().getFullYear()} Nova Star AI · Designed By Ashkan with love
         ❤️
       </footer>

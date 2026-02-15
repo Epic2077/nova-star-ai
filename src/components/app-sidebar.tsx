@@ -242,6 +242,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     setChatData((previous) => previous.filter((chat) => chat.id !== chatId));
 
+    router.replace("/chat");
     toast.success("Chat deleted");
   };
 

@@ -9,7 +9,7 @@ const Philosophy = () => {
         <h2 className="text-3xl font-semibold">
           Built for Growth, Not Dependency
         </h2>
-        <p className="mt-6 text-slate-600 text-lg">
+        <p className="mt-6 text-slate-600 text-lg dark:text-chat-bubble">
           Nova Star is designed to encourage direct communication, emotional
           regulation, and mutual understanding. It supports your relationship —
           it never replaces it.

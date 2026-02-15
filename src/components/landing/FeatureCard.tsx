@@ -16,7 +16,9 @@ function FeatureCard({ icon, title, description }: featureInfoType) {
         <CardContent className="p-8 text-center">
           <div className="mb-4 flex justify-center">{icon}</div>
           <h3 className="text-xl font-semibold">{title}</h3>
-          <p className="mt-4 text-slate-600">{description}</p>
+          <p className="mt-4 text-slate-600 dark:text-foreground">
+            {description}
+          </p>
         </CardContent>
       </Card>
     </motion.div>

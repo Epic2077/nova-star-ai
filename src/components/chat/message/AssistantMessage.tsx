@@ -27,6 +27,9 @@ import {
 import { Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useRef } from "react";
+import isRTL from "@/lib/rtlDetect";
+import { Vazirmatn } from "next/font/google";
+const vazirmatn = Vazirmatn({ subsets: ["arabic", "latin"], display: "swap" });
 
 export default function AssistantMessage({
   content,
@@ -36,6 +39,7 @@ export default function AssistantMessage({
   animate?: boolean;
 }) {
   const { theme } = useTheme();
+  const rtl = isRTL(content);
 
   const sanitizeSchema = {
     ...defaultSchema,
@@ -60,6 +64,9 @@ export default function AssistantMessage({
 
   const rehypePlugins = [
     rehypeRaw,
+    // `rehype-sanitize` options cause a typing mismatch with the Pluggable[] signature —
+    // narrow suppression is used here because runtime behavior is correct.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     [rehypeSanitize, sanitizeSchema] as any,
     rehypeKatex,
   ];
@@ -76,7 +83,7 @@ export default function AssistantMessage({
 
       await navigator.clipboard.writeText(text);
       toast.success("Copied to clipboard");
-    } catch (err) {
+    } catch {
       toast.error("Copy failed");
     }
   };
@@ -84,11 +91,13 @@ export default function AssistantMessage({
   if (animate) {
     return (
       <motion.div
+        dir={rtl ? "rtl" : "ltr"}
         ref={containerRef}
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ duration: 0.36, ease: "easeOut" }}
         className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
+        style={rtl ? { fontFamily: vazirmatn.style.fontFamily } : {}}
       >
         <ReactMarkdown
           remarkPlugins={remarkPlugins}
@@ -98,7 +107,7 @@ export default function AssistantMessage({
           {content}
         </ReactMarkdown>
 
-        <div className="absolute right-2 top-2">
+        <div>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -118,6 +127,8 @@ export default function AssistantMessage({
 
   return (
     <div
+      dir={rtl ? "rtl" : "ltr"}
+      style={rtl ? { fontFamily: vazirmatn.style.fontFamily } : {}}
       ref={containerRef}
       className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
     >

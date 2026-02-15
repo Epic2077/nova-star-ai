@@ -6,6 +6,10 @@ import type { Dispatch, SetStateAction } from "react";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import {
+  shouldUseReferenceLayer,
+  shouldUseInsightLayer,
+} from "@/lib/promptLayerDetection";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -58,6 +62,8 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       return;
     }
 
+    const tempId = `tmp-${Date.now()}`;
+
     window.dispatchEvent(
       new CustomEvent("chatCreated", {
         detail: {
@@ -70,47 +76,86 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       }),
     );
 
-    // Send the user's first message to the server API so assistant reply is generated and persisted
-    try {
-      const resp = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: data.id, content, role: "user" }),
-      });
-
-      const json = await resp.json();
-      if (!resp.ok || json?.error) {
-        throw new Error(json?.error || "AI request failed");
-      }
-
-      // generate conversation title separately (first message only)
-      void fetch("/api/chat/title", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
-      })
-        .then(async (titleResp) => {
-          if (!titleResp.ok) return;
-          const titleJson = await titleResp.json();
-          if (!titleJson?.title) return;
-
-          window.dispatchEvent(
-            new CustomEvent("chatRenamed", {
-              detail: { chatId: data.id, newTitle: titleJson.title },
-            }),
-          );
-        })
-        .catch(() => {
-          /* don't block user flow if title generation fails */
-        });
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to contact AI");
-      // still navigate to the chat even if AI failed
-    }
-
+    // Optimistic UI: tell ChatBody about the user's pending message so it shows immediately
+    // Navigate immediately - don't wait for AI response
     setInput("");
     router.push(`/chat/${data.id}`);
     setIsSubmitting(false);
+
+    // Dispatch optimistic message after navigation so ChatBody (mounted on /chat) receives it
+    setTimeout(() => {
+      window.dispatchEvent(
+        new CustomEvent("optimisticMessage", {
+          detail: {
+            chatId: data.id,
+            message: { id: tempId, role: "user", content },
+          },
+        }),
+      );
+    }, 250);
+
+    // Send the user's first message in the background (fire-and-forget)
+    void fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chatId: data.id,
+        content,
+        useReferenceLayer: shouldUseReferenceLayer(content),
+        useInsightLayer: shouldUseInsightLayer(content),
+      }),
+    })
+      .then(async (resp) => {
+        if (!resp.ok) throw new Error("AI request failed");
+        const json = await resp.json().catch(() => ({}));
+
+        if (json?.reply) {
+          // delay assistantReply slightly so the chat page mounts and begins listening
+          setTimeout(() => {
+            window.dispatchEvent(
+              new CustomEvent("assistantReply", {
+                detail: { chatId: data.id, content: json.reply },
+              }),
+            );
+          }, 350);
+        }
+
+        // server will insert messages and realtime subscription will update the UI
+        window.dispatchEvent(
+          new CustomEvent("messageSent", {
+            detail: { chatId: data.id, tempId },
+          }),
+        );
+      })
+      .catch(() => {
+        // inform ChatBody to replace the thinking indicator with a failed message
+        window.dispatchEvent(
+          new CustomEvent("messageFailed", {
+            detail: { chatId: data.id, tempId },
+          }),
+        );
+      });
+
+    // Generate conversation title separately (first message only)
+    void fetch("/api/chat/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
+    })
+      .then(async (titleResp) => {
+        if (!titleResp.ok) return;
+        const titleJson = await titleResp.json();
+        if (!titleJson?.title) return;
+
+        window.dispatchEvent(
+          new CustomEvent("chatRenamed", {
+            detail: { chatId: data.id, newTitle: titleJson.title },
+          }),
+        );
+      })
+      .catch(() => {
+        /* don't block user flow if title generation fails */
+      });
   };
 
   const maxTextareaHeight = 200;
