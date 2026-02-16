@@ -50,7 +50,7 @@ export function LoginFormCreator({
 
     setIsSubmitting(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -61,9 +61,19 @@ export function LoginFormCreator({
       return;
     }
 
+    const userId = signInData.user?.id;
+
+    if (!userId) {
+      await supabase.auth.signOut();
+      toast.error("Could not determine current user.");
+      setIsSubmitting(false);
+      return;
+    }
+
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("role")
+      .eq("id", userId)
       .single();
 
     if (profileError) {

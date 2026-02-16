@@ -26,40 +26,44 @@ export function CreatorAdminProvider({
   const [isLoading, setIsLoading] = React.useState(false);
   const [result, setResult] = React.useState<AdminResponse | null>(null);
 
+  const runLookup = React.useCallback(async (emailToLookup: string) => {
+    const trimmed = emailToLookup.trim();
+
+    if (!trimmed) {
+      toast.error("Please enter an email address.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      const response = await fetch(
+        `/api/admin/user-data?email=${encodeURIComponent(trimmed)}`,
+      );
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload?.error || "Lookup failed");
+      }
+
+      setEmail(trimmed);
+      setResult(payload as AdminResponse);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(STORAGE_KEY, trimmed);
+      }
+    } catch (error) {
+      setResult(null);
+      toast.error(error instanceof Error ? error.message : "Lookup failed");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const lookupByEmail = React.useCallback(
     async (emailOverride?: string) => {
-      const trimmed = (emailOverride ?? email).trim();
-
-      if (!trimmed) {
-        toast.error("Please enter an email address.");
-        return;
-      }
-
-      setIsLoading(true);
-
-      try {
-        const response = await fetch(
-          `/api/admin/user-data?email=${encodeURIComponent(trimmed)}`,
-        );
-        const payload = await response.json();
-
-        if (!response.ok) {
-          throw new Error(payload?.error || "Lookup failed");
-        }
-
-        setEmail(trimmed);
-        setResult(payload as AdminResponse);
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem(STORAGE_KEY, trimmed);
-        }
-      } catch (error) {
-        setResult(null);
-        toast.error(error instanceof Error ? error.message : "Lookup failed");
-      } finally {
-        setIsLoading(false);
-      }
+      void runLookup(emailOverride ?? email);
     },
-    [email],
+    [email, runLookup],
   );
 
   React.useEffect(() => {
@@ -69,8 +73,8 @@ export function CreatorAdminProvider({
     if (!storedEmail) return;
 
     setEmail(storedEmail);
-    void lookupByEmail(storedEmail);
-  }, [lookupByEmail]);
+    void runLookup(storedEmail);
+  }, [runLookup]);
 
   const value = React.useMemo<CreatorAdminContextValue>(
     () => ({
