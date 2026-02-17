@@ -64,22 +64,39 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const { data: listedUsers, error: listError } =
-      await service.auth.admin.listUsers({
-        page: 1,
-        perPage: 1000,
-      });
+    // Look up user by email directly instead of fetching all users
+    const { data: usersById, error: listError } = await service
+      .rpc("get_user_id_by_email", { lookup_email: email })
+      .maybeSingle();
 
-    if (listError) {
-      return NextResponse.json(
-        { error: "Failed to lookup user" },
-        { status: 500 },
+    // Fallback: if the RPC doesn't exist yet, use the admin API with a filter
+    let targetUser;
+    if (listError || !usersById) {
+      // Fallback to listing, but this is O(n) — add the RPC for production use
+      const { data: listedUsers, error: fallbackError } =
+        await service.auth.admin.listUsers({
+          page: 1,
+          perPage: 1000,
+        });
+
+      if (fallbackError) {
+        return NextResponse.json(
+          { error: "Failed to lookup user" },
+          { status: 500 },
+        );
+      }
+
+      targetUser = listedUsers.users.find(
+        (candidate) => candidate.email?.toLowerCase() === email,
       );
+    } else {
+      // RPC returned a user id — fetch the full user object
+      const { data: userData, error: userError } =
+        await service.auth.admin.getUserById(usersById.id);
+      if (!userError && userData?.user) {
+        targetUser = userData.user;
+      }
     }
-
-    const targetUser = listedUsers.users.find(
-      (candidate) => candidate.email?.toLowerCase() === email,
-    );
 
     if (!targetUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

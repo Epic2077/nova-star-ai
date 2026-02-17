@@ -76,23 +76,21 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       }),
     );
 
-    // Optimistic UI: tell ChatBody about the user's pending message so it shows immediately
+    // Store optimistic first message so ChatBody shows it instantly on mount
+    // (eliminates the race condition with custom events + navigation)
+    try {
+      sessionStorage.setItem(
+        `optimistic-msg-${data.id}`,
+        JSON.stringify({ id: tempId, role: "user", content }),
+      );
+    } catch {
+      // sessionStorage may be unavailable — fall through
+    }
+
     // Navigate immediately - don't wait for AI response
     setInput("");
     router.push(`/chat/${data.id}`);
     setIsSubmitting(false);
-
-    // Dispatch optimistic message after navigation so ChatBody (mounted on /chat) receives it
-    setTimeout(() => {
-      window.dispatchEvent(
-        new CustomEvent("optimisticMessage", {
-          detail: {
-            chatId: data.id,
-            message: { id: tempId, role: "user", content },
-          },
-        }),
-      );
-    }, 250);
 
     // Send the user's first message in the background (fire-and-forget)
     void fetch("/api/chat", {

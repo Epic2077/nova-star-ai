@@ -29,8 +29,26 @@ const ChatBody = () => {
   const params = useParams<{ dataId?: string }>();
   const chatId = params?.dataId;
 
-  const [message, setMessage] = useState<Message[]>([]);
+  // Read optimistic first message from sessionStorage at initialization
+  // so the user bubble is visible on the VERY FIRST render (no flash).
+  const initialOptimistic = useMemo(() => {
+    if (typeof window === "undefined" || !chatId) return null;
+    try {
+      const stored = sessionStorage.getItem(`optimistic-msg-${chatId}`);
+      if (stored) return JSON.parse(stored) as Message;
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }, [chatId]);
+
+  const [message, setMessage] = useState<Message[]>(
+    initialOptimistic ? [initialOptimistic] : [],
+  );
   const [input, setInput] = useState("");
+  const [isAwaitingResponse, setIsAwaitingResponse] = React.useState(
+    () => !!initialOptimistic,
+  );
   const [animatedAssistantId, setAnimatedAssistantId] = useState<string | null>(
     null,
   );
@@ -82,6 +100,21 @@ const ChatBody = () => {
         return;
       }
 
+      // The optimistic first message (if any) was already shown via
+      // initialOptimistic above, so we only need its reference for the
+      // "DB is still empty" fallback below.
+      let optimisticMsg: Message | null = null;
+      try {
+        const stored = sessionStorage.getItem(`optimistic-msg-${chatId}`);
+        if (stored) {
+          optimisticMsg = JSON.parse(stored) as Message;
+          // DON'T remove from sessionStorage yet — it's needed if the
+          // effect re-runs (React StrictMode, fast remount, etc.).
+        }
+      } catch {
+        // sessionStorage unavailable — fall through
+      }
+
       const { data, error } = await supabase
         .from("messages")
         .select("id, content, role, chat_id, created_at")
@@ -99,14 +132,27 @@ const ChatBody = () => {
         role: item.role,
       }));
 
-      setMessage(mapped);
+      if (mapped.length > 0) {
+        // Real messages exist — use DB data and clean up sessionStorage
+        try {
+          sessionStorage.removeItem(`optimistic-msg-${chatId}`);
+        } catch {
+          /* ignore */
+        }
+        setMessage(mapped);
 
-      // If the latest message is from the user and there's no assistant reply yet,
-      // show the typing indicator (covers initial-first-message case).
-      const last = mapped[mapped.length - 1];
-      if (last && last.role === "user") {
+        const last = mapped[mapped.length - 1];
+        if (last && last.role === "user") {
+          setIsAwaitingResponse(true);
+        } else {
+          setIsAwaitingResponse(false);
+        }
+      } else if (optimisticMsg) {
+        // DB is still empty — keep showing the optimistic message + typing
+        setMessage([optimisticMsg]);
         setIsAwaitingResponse(true);
       } else {
+        setMessage([]);
         setIsAwaitingResponse(false);
       }
 
@@ -125,6 +171,13 @@ const ChatBody = () => {
             (payload) => {
               const row = payload.new as MessageRecord;
 
+              // Real message arrived from DB — safe to clean up sessionStorage
+              try {
+                sessionStorage.removeItem(`optimistic-msg-${chatId}`);
+              } catch {
+                /* ignore */
+              }
+
               setMessage((prev) => {
                 // avoid duplicates
                 if (prev.some((m) => m.id === row.id)) return prev;
@@ -132,11 +185,8 @@ const ChatBody = () => {
                 // remove optimistic temp user messages and any local "failed-" assistant placeholders
                 const cleaned = prev.filter((m) => {
                   if (typeof m.id === "string") {
-                    if (
-                      m.id.startsWith("tmp-") &&
-                      m.role === row.role &&
-                      m.content === row.content
-                    ) {
+                    // When the real user message arrives, remove the temp placeholder
+                    if (m.id.startsWith("tmp-") && row.role === "user") {
                       return false;
                     }
 
@@ -228,18 +278,14 @@ const ChatBody = () => {
     const handleMessageSent = (event: Event) => {
       const custom = event as CustomEvent<{ chatId?: string; tempId?: string }>;
       const sentChatId = custom.detail?.chatId;
-      const tempId = custom.detail?.tempId as string | undefined;
       if (!sentChatId || sentChatId !== chatId) return;
 
-      // clear failed placeholders and optimistic temp user message with tempId.
-      // keep any "asst-temp-" placeholder visible until realtime inserts the real assistant row.
+      // Only clear failed placeholders here.
+      // Do NOT remove the optimistic temp user message — it will be
+      // replaced by the real DB row when the realtime INSERT arrives.
       setMessage((prev) => {
         const filtered = prev.filter(
-          (m) =>
-            !(
-              typeof m.id === "string" &&
-              (m.id === tempId || m.id.startsWith("failed-"))
-            ),
+          (m) => !(typeof m.id === "string" && m.id.startsWith("failed-")),
         );
 
         // if an assistant message (real or placeholder) already exists, don't show the typing indicator
@@ -313,8 +359,6 @@ const ChatBody = () => {
       );
     };
   }, [chatId, scrollToBottom]);
-
-  const [isAwaitingResponse, setIsAwaitingResponse] = React.useState(false);
 
   const handleSubmit = async () => {
     const content = input.trim();

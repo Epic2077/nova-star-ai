@@ -1,10 +1,28 @@
+/**
+ * Checks if a keyword matches as a whole word using word-boundary regex.
+ * For non-Latin scripts (Persian/Arabic), uses whitespace/start/end boundaries.
+ */
+function matchesWholeWord(input: string, keyword: string): boolean {
+  // Check if keyword contains non-Latin characters (Persian, Arabic, etc.)
+  const hasNonLatin = /[^\u0000-\u007F]/.test(keyword);
+  if (hasNonLatin) {
+    // For non-Latin scripts, use whitespace or string boundary matching
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`(?:^|\\s)${escaped}(?:\\s|$)`, "u");
+    return re.test(input);
+  }
+  // For Latin keywords, use \b word boundaries (case-insensitive)
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(`\\b${escaped}\\b`, "i");
+  return re.test(input);
+}
+
 export function shouldUseReferenceLayer(input: string): boolean {
   const lowerInput = input.toLowerCase().trim();
 
   const ashkanKeywords = [
     // English
     "ashkan",
-    "Ashkan",
     "my boyfriend",
     "boyfriend",
     "love",
@@ -27,7 +45,6 @@ export function shouldUseReferenceLayer(input: string): boolean {
     "برام",
 
     // Finglish
-    "ashkan",
     "ashkanam",
     "dost pesar",
     "doost pesar",
@@ -36,11 +53,9 @@ export function shouldUseReferenceLayer(input: string): boolean {
   ];
 
   const relationshipKeywords = [
-    // English natural
-    "he",
+    // English natural — use phrases that are unambiguous
     "he said",
     "he did",
-    "love",
     "he told me",
     "he feels",
     "why is he",
@@ -94,11 +109,11 @@ export function shouldUseReferenceLayer(input: string): boolean {
   ];
 
   const hasAshkanMention = ashkanKeywords.some((keyword) =>
-    lowerInput.includes(keyword),
+    matchesWholeWord(lowerInput, keyword.toLowerCase()),
   );
 
   const hasRelationshipContext = relationshipKeywords.some((keyword) =>
-    lowerInput.includes(keyword),
+    matchesWholeWord(lowerInput, keyword.toLowerCase()),
   );
 
   return hasAshkanMention || hasRelationshipContext;
@@ -144,5 +159,7 @@ export function shouldUseInsightLayer(input: string): boolean {
     "sade begu",
   ];
 
-  return insightKeywords.some((keyword) => lowerInput.includes(keyword));
+  return insightKeywords.some((keyword) =>
+    matchesWholeWord(lowerInput, keyword.toLowerCase()),
+  );
 }

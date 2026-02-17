@@ -1,5 +1,7 @@
 export let dailyQuote = "Love you no matter what!";
 
+let textOrder = 0;
+
 function updateDailyQuote() {
   const quotes = [
     "Love you no matter what!",
@@ -302,16 +304,14 @@ function updateDailyQuote() {
     "You are my forever love.",
   ];
 
-  let textOrder = 0;
-  if (textOrder <= quotes.length) {
-    dailyQuote = quotes[textOrder];
-    textOrder++;
-  } else {
+  if (textOrder >= quotes.length) {
     textOrder = 0;
-    dailyQuote = quotes[textOrder];
-    textOrder++;
   }
+  dailyQuote = quotes[textOrder];
+  textOrder++;
 }
 
-setInterval(updateDailyQuote, 24 * 60 * 60 * 1000); // Update every 24 hours
+if (typeof window !== "undefined") {
+  setInterval(updateDailyQuote, 24 * 60 * 60 * 1000); // Update every 24 hours
+}
 updateDailyQuote();

@@ -25,13 +25,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     let isMounted = true;
 
     const loadSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!isMounted) {
-        return;
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (!isMounted) return;
+        if (error) {
+          console.error("Failed to load session:", error.message);
+        }
+        setSession(data.session ?? null);
+        setUser(data.session?.user ?? null);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("Supabase unreachable:", err);
+        setSession(null);
+        setUser(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
       }
-      setSession(data.session ?? null);
-      setUser(data.session?.user ?? null);
-      setIsLoading(false);
     };
 
     void loadSession();

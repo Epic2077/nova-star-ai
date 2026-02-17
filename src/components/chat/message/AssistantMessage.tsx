@@ -17,7 +17,7 @@ import rehypeRaw from "rehype-raw";
 import "katex/dist/katex.min.css";
 
 import { useTheme } from "next-themes";
-import { createMarkdownComponents } from "@/constant/markDown";
+import { createMarkdownComponents } from "@/components/markdown/markDown";
 import { motion } from "motion/react";
 import {
   Tooltip,

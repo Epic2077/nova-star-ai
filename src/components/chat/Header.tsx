@@ -18,7 +18,6 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import React, { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Skeleton } from "../ui/skeleton";
 import { TextAnimate } from "../ui/text-animate";
 
 const ChatHeader = () => {
@@ -90,7 +89,9 @@ const ChatHeader = () => {
             <BreadcrumbItem className="hidden md:block">
               <BreadcrumbLink href="#" className="text-foreground">
                 {isLoading ? (
-                  <Skeleton className="h-4 w-20 bg-muted" />
+                  <span className="text-sm text-muted-foreground">
+                    Loading…
+                  </span>
                 ) : (
                   <TextAnimate as="span" by="word" once animation="blurInUp">
                     {String(user?.user_metadata?.full_name || "User")}
@@ -102,7 +103,9 @@ const ChatHeader = () => {
             <BreadcrumbItem>
               <BreadcrumbPage>
                 {isChatTitleLoading ? (
-                  <Skeleton className="h-4 w-20 bg-muted" />
+                  <span className="text-sm text-muted-foreground">
+                    Loading…
+                  </span>
                 ) : (
                   <TextAnimate as="span" by="word" once animation="blurInUp">
                     {chatTitle}
