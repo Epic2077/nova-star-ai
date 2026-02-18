@@ -35,7 +35,7 @@ export function createMarkdownComponents({
     ),
 
     p: ({ children }: { children?: React.ReactNode }) => (
-      <p className="mb-3">{children}</p>
+      <div className="mb-3">{children}</div>
     ),
 
     bold: ({ children }: { children?: React.ReactNode }) => (
