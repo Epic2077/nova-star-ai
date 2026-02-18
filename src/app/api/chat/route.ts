@@ -2,7 +2,19 @@ import { NextRequest, NextResponse } from "next/server";
 import { NOVA_CORE_PROMPT } from "@/lib/prompts/novaCore";
 import { NOVA_MEMORY_LAYER_PROMPT } from "@/lib/prompts/novaMemory";
 import { NOVA_INSIGHT_LAYER_PROMPT } from "@/lib/prompts/novaInsight";
-import { NOVA_REFERENCE_PROMPT } from "@/lib/prompts/novaReference";
+import {
+  buildRelationshipPrompt,
+  DEFAULT_RELATIONSHIP_CONFIG,
+} from "@/lib/prompts/novaRelationship";
+import {
+  buildReferencePrompt,
+  DEFAULT_PARTNER_PROFILE,
+} from "@/lib/prompts/novaReference";
+import { buildMainUserPrompt } from "@/lib/prompts/novaMainUser";
+import {
+  shouldUseRelationshipLayer,
+  shouldUseInsightLayer,
+} from "@/lib/promptLayerDetection";
 import {
   callProvider,
   callProviderStream,
@@ -52,8 +64,6 @@ export async function POST(req: NextRequest) {
       provider = "deepseek", // default to deepseek for now
       model,
       useMemoryLayer = true, // always on for user continuity
-      useInsightLayer = false,
-      useReferenceLayer = false,
       useWebSearch = false,
       useDeepThinking = false,
       attachments = [] as FileAttachment[],
@@ -65,6 +75,11 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
+
+    // Auto-detect which prompt layers to activate (server-side)
+    // In the future, partnerNames will be loaded from a user_profiles table.
+    const useRelationshipLayer = shouldUseRelationshipLayer(content);
+    const useInsightLayer = shouldUseInsightLayer(content);
 
     /**
      * 0.5️⃣ Verify chatId belongs to authenticated user
@@ -164,9 +179,18 @@ export async function POST(req: NextRequest) {
 
     const layeredSystemPrompt = [
       NOVA_CORE_PROMPT,
+      buildMainUserPrompt({
+        name:
+          user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "there",
+      }),
       useMemoryLayer ? NOVA_MEMORY_LAYER_PROMPT : null,
       useInsightLayer ? NOVA_INSIGHT_LAYER_PROMPT : null,
-      useReferenceLayer ? NOVA_REFERENCE_PROMPT : null,
+      useRelationshipLayer
+        ? buildRelationshipPrompt(DEFAULT_RELATIONSHIP_CONFIG)
+        : null,
+      useRelationshipLayer
+        ? buildReferencePrompt(DEFAULT_PARTNER_PROFILE)
+        : null,
     ]
       .filter(Boolean)
       .join("\n\n");

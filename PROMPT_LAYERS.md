@@ -1,246 +1,208 @@
-# Nova Star AI - Prompt Layer System
+# Nova Star AI — Prompt Layer Architecture
 
 ## Overview
 
-Nova Star AI uses a modular prompt system that activates different layers based on context and need, optimizing token usage while preserving functionality.
+Nova Star AI uses a **5-layer modular prompt system** designed for a two-partner relationship AI. Each layer has specific **ownership**, **editability**, and **visibility** rules. Layers activate based on context and need, optimizing tokens while preserving deep personalization.
 
 ## Layer Architecture
 
-### 1. **Core Layer** (Always Active)
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. CORE              Always active   Creator-only control  │
+│  2. MAIN USER         Always active   User / AI editable    │
+│  3. REFERENCE          Conditional    Partner / AI editable  │
+│  4. SHARED MEMORY     Always active   AI-only editable      │
+│  5. SHARED INSIGHT     Conditional    AI-only editable      │
+│  (+) RELATIONSHIP      Conditional    Paired with Reference  │
+└─────────────────────────────────────────────────────────────┘
+```
 
-- **File**: `src/lib/prompts/novaCore.ts`
-- **Token Cost**: ~1800 tokens
-- **Activation**: Always included in every request
-- **Content**:
-  - Role & Purpose
-  - Directive hierarchy (emotional safety → communication → trust)
-  - Primary User Awareness (Shadi)
-  - Representation of Ashkan
-  - Default Emotional Stance
-  - Conflict Handling Protocol
-  - Relationship Awareness
-  - Communication Style
-  - Ethical Boundaries
+---
 
-### 2. **Memory Layer** (Always Active)
+### 1. Core Layer — Always Active
 
-- **File**: `src/lib/prompts/novaMemory.ts`
-- **Token Cost**: ~600 tokens
-- **Activation**: Enabled by default (`useMemoryLayer: true`)
-- **Status**: **Always ON** for user continuity
-- **Content**:
-  - Memory storage guidelines (preferences, emotional needs, dates, gift ideas)
-  - Passive, respectful, non-invasive rules
-  - Never assume permanence or store grievances
-- **Includes**: Previous conversation summaries from `memory_summary` field (generated every 20 messages)
+|                   |                                    |
+| ----------------- | ---------------------------------- |
+| **File**          | `src/lib/prompts/novaCore.ts`      |
+| **Export**        | `NOVA_CORE_PROMPT` (static string) |
+| **Controlled by** | Creator only — invisible to users  |
+| **Activation**    | Every request                      |
 
-### 3. **Insight Layer** (Intelligent Detection)
+**Content**: Identity, tone, formatting (LaTeX/Markdown), emotional stance, conflict handling, ethics, long-term goal. Generic and user-agnostic — never references specific users or relationships.
 
-- **File**: `src/lib/prompts/novaInsight.ts`
-- **Token Cost**: ~400 tokens
-- **Activation**: Automatically detected by `shouldUseInsightLayer()`
-- **Status**: **Auto-activated** when user requests insights
-- **Detection Keywords**:
-  - "what patterns", "summarize", "tell me about her"
-  - "what does she like", "what does she prefer"
-  - "gift idea", "gift suggestion", "what should i get"
-  - "insight", "overview", "what have you learned"
-- **Content**:
-  - Instructions for generating high-level relationship insights
-  - What she values most, responds to best, needs from relationship
-  - Gift-relevant observations
-  - Never share conflict transcripts or frame as surveillance
+---
 
-### 4. **Reference Layer** (Intelligent Detection)
+### 2. Main User Layer — Always Active
 
-- **File**: `src/lib/prompts/novaReference.ts`
-- **Token Cost**: ~800 tokens
-- **Activation**: Automatically detected by `shouldUseReferenceLayer()`
-- **Status**: **Auto-activated** when Ashkan is mentioned or referenced
-- **Detection Keywords**:
-  - Direct mentions: "ashkan", "اشکان", "boyfriend", "bf", "partner"
-  - Pronouns: "he said", "he did", "his", "him"
-  - Questions: "why does he", "what does he", "how does he", "is he"
-  - Relationship context: "our relationship", "we argued", "between us", "understand him"
-- **Content**:
-  - Internal knowledge about Ashkan (traits, values, communication style)
-  - Relational tendencies and important truths
-  - Protective tendency handling guidelines
-  - Encouragement protocol
+|                 |                                                                |
+| --------------- | -------------------------------------------------------------- |
+| **File**        | `src/lib/prompts/novaMainUser.ts`                              |
+| **Export**      | `buildMainUserPrompt(profile: UserProfile)`                    |
+| **Editable by** | User (self-write or personality quiz) or AI (gradual learning) |
+| **Activation**  | Every request — built dynamically per user                     |
+
+**Content**: User's name, personality traits, emotional patterns, communication style, interests, AI-generated notes.
+
+**Setup modes**:
+
+1. **Self-written** — user fills out their own profile
+2. **Personality quiz** — user answers questions, AI generates the profile
+
+**Key**: Can double as the Reference layer for the partner's account.
+
+**Interface**: `UserProfile { name, tone?, interests?, emotionalPatterns?, communicationStyle?, aiNotes? }`
+
+**Future**: Loaded from `user_profiles` table. AI updates fields over time.
+
+---
+
+### 3. Reference Layer — Conditional (Paired with Relationship)
+
+|                 |                                                            |
+| --------------- | ---------------------------------------------------------- |
+| **File**        | `src/lib/prompts/novaReference.ts`                         |
+| **Export**      | `buildReferencePrompt(profile: PartnerProfile)`            |
+| **Editable by** | Partner themselves or AI — current user cannot view/modify |
+| **Activation**  | When relationship context is detected                      |
+
+**Content**: Partner's name, core traits, relational tendencies, important truths, AI-generated notes.
+
+**Setup modes**:
+
+1. **AI-generated** — Nova builds the profile over time from conversations
+2. **Shared via code** — partner fills it out, or their Main User profile is used
+
+**Interface**: `PartnerProfile { name, traits?, relationalTendencies?, importantTruths?, aiNotes? }`
+
+**Default**: `DEFAULT_PARTNER_PROFILE` (Ashkan — hardcoded until DB is ready)
+
+**Future**: Loaded from `partner_profiles` table.
+
+---
+
+### 4. Shared Memory Layer — Always Active
+
+|                 |                                            |
+| --------------- | ------------------------------------------ |
+| **File**        | `src/lib/prompts/novaMemory.ts`            |
+| **Export**      | `NOVA_MEMORY_LAYER_PROMPT` (static string) |
+| **Editable by** | AI only — both partners can view           |
+| **Activation**  | Every request (`useMemoryLayer: true`)     |
+
+**Content**: Preferences, emotional needs, important dates, routines, sensitivities, growth moments. Balanced — stores memories from both partners fairly.
+
+**Privacy rule**: Never share one partner's private disclosures with the other without consent.
+
+**Includes**: Conversation summaries from `memory_summary` field (generated every 20 messages).
+
+**Future**: `shared_memory` table — AI writes, both partners read.
+
+---
+
+### 5. Shared Insight Layer — Conditional
+
+|                 |                                                     |
+| --------------- | --------------------------------------------------- |
+| **File**        | `src/lib/prompts/novaInsight.ts`                    |
+| **Export**      | `NOVA_INSIGHT_LAYER_PROMPT` (static string)         |
+| **Editable by** | AI only — both partners can view (future dashboard) |
+| **Activation**  | When insight context is detected                    |
+
+**Content**: Emotional needs, communication preferences, appreciation patterns, conflict style, growth areas, actionable suggestions. Gender-neutral, balanced for both partners.
+
+**Future**: Dashboard showing each partner what the other needs — without exposing private conversations.
+
+---
+
+### (+) Relationship Layer — Conditional (Paired with Reference)
+
+|                |                                                                   |
+| -------------- | ----------------------------------------------------------------- |
+| **File**       | `src/lib/prompts/novaRelationship.ts`                             |
+| **Export**     | `NOVA_RELATIONSHIP_PROMPT` (static string)                        |
+| **Activation** | When relationship context is detected (same trigger as Reference) |
+
+**Content**: Directive hierarchy (emotional safety → communication → trust), relationship awareness, partner representation rules, conflict protocol, long-term relationship goal.
+
+**Note**: Focuses on the relationship _as a whole_, not individual profiles.
+
+---
 
 ## Intelligent Layer Detection
 
-Nova Star AI now automatically detects which layers to activate based on the user's input, optimizing token usage without sacrificing functionality.
+Layers are activated server-side based on message content using a weighted scoring system.
 
-### Detection Logic
-
-**Reference**: `src/lib/promptLayerDetection.ts`
+**Detection file**: `src/lib/promptLayerDetection.ts`
 
 ```typescript
-// Automatically analyzes user input and activates appropriate layers
-const useReferenceLayer = shouldUseReferenceLayer(content);
+const useRelationshipLayer = shouldUseRelationshipLayer(content);
 const useInsightLayer = shouldUseInsightLayer(content);
 ```
 
+**Scoring system**:
+
+- STRONG keywords (2 pts) — e.g., partner name, "رابطه", "relationship"
+- MEDIUM keywords (1–1.5 pts) — e.g., "partner", "عشق"
+- WEAK keywords (0.5 pts) — e.g., "he said", "she feels"
+- **Threshold**: 2 points to activate
+- **Configurable**: `partnerNames` via `RelationshipDetectionConfig`
+
 ### Example Scenarios
 
-**Scenario 1**: "How are you today?"
+**"How are you today?"**
 
-```typescript
-{
-  chatId: "...",
-  content: "How are you today?",
-  // Auto-detected:
-  useMemoryLayer: true,       // ✅ Always on
-  useInsightLayer: false,     // ❌ No insight keywords
-  useReferenceLayer: false,   // ❌ No Ashkan mention
-}
+```
+Core ✅ | Main User ✅ | Memory ✅ | Relationship ❌ | Reference ❌ | Insight ❌
 ```
 
-**Token Cost**: ~2400 tokens (Core + Memory)
+**"Why did Ashkan say that?"**
 
----
-
-**Scenario 2**: "Why did Ashkan say that?"
-
-```typescript
-{
-  chatId: "...",
-  content: "Why did Ashkan say that?",
-  // Auto-detected:
-  useMemoryLayer: true,       // ✅ Always on
-  useInsightLayer: false,     // ❌ No insight keywords
-  useReferenceLayer: true,    // ✅ Detected "Ashkan"
-}
+```
+Core ✅ | Main User ✅ | Memory ✅ | Relationship ✅ | Reference ✅ | Insight ❌
 ```
 
-**Token Cost**: ~3200 tokens (Core + Memory + Reference)
+**"What gift ideas do you have for him?"**
 
----
-
-**Scenario 3**: "What gift ideas do you have for him?"
-
-```typescript
-{
-  chatId: "...",
-  content: "What gift ideas do you have for him?",
-  // Auto-detected:
-  useMemoryLayer: true,       // ✅ Always on
-  useInsightLayer: true,      // ✅ Detected "gift ideas"
-  useReferenceLayer: true,    // ✅ Detected "him" (pronoun)
-}
+```
+Core ✅ | Main User ✅ | Memory ✅ | Relationship ✅ | Reference ✅ | Insight ✅
 ```
 
-**Token Cost**: ~3600 tokens (all layers)
-
-## Memory System Integration
-
-When `useMemoryLayer: true`:
-
-1. System fetches `memory_summary` from the `chats` table
-2. Includes it in the system prompt as: `PREVIOUS CONVERSATION MEMORY:\n{summary}`
-3. Every 20 messages, generates a new summary segment via AI
-4. Appends summary to `memory_summary` field in database
-5. Updates `memory_updated_at` timestamp
-
-**Benefits**:
-
-- Long-term continuity without sending full message history
-- Token-efficient context preservation
-- Automatic background processing (non-blocking)
-
-## How Layer Detection Works
-
-### Automatic Detection
-
-Layers are automatically activated by analyzing user input through detection functions in `src/lib/promptLayerDetection.ts`:
-
-**Frontend Components** (`NewChatInput.tsx` and `ChatBody.tsx`):
+## System Prompt Composition
 
 ```typescript
-import {
-  shouldUseReferenceLayer,
-  shouldUseInsightLayer,
-} from "@/lib/promptLayerDetection";
-
-// Automatically detect which layers are needed
-const resp = await fetch("/api/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    chatId,
-    content,
-    useReferenceLayer: shouldUseReferenceLayer(content), // Auto-detected
-    useInsightLayer: shouldUseInsightLayer(content), // Auto-detected
-    // useMemoryLayer defaults to true in API
-  }),
-});
+const layeredSystemPrompt = [
+  NOVA_CORE_PROMPT, // Always
+  buildMainUserPrompt({ name: user.full_name }), // Always (dynamic)
+  useMemoryLayer ? NOVA_MEMORY_LAYER_PROMPT : null, // Always
+  useInsightLayer ? NOVA_INSIGHT_LAYER_PROMPT : null, // When insights detected
+  useRelationshipLayer ? NOVA_RELATIONSHIP_PROMPT : null, // When relationship detected
+  useRelationshipLayer ? buildReferencePrompt(profile) : null, // Paired with relationship
+]
+  .filter(Boolean)
+  .join("\n\n");
 ```
 
-### Manual Override (Advanced)
+## Access Control Summary
 
-If needed, you can manually override detection by passing flags directly:
-
-```typescript
-await fetch("/api/chat", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    chatId: "uuid",
-    content: "message text",
-    useMemoryLayer: false, // optional, defaults to true
-    useInsightLayer: true, // optional, overrides detection
-    useReferenceLayer: true, // optional, overrides detection
-    systemPrompt: "...", // optional, overrides all layers
-  }),
-});
-```
-
-## Token Optimization Strategy
-
-With intelligent detection, token usage is automatically optimized based on context:
-
-| Scenario        | Core    | Memory | Insight | Reference | Total    | Example               |
-| --------------- | ------- | ------ | ------- | --------- | -------- | --------------------- |
-| General chat    | ✅ 1800 | ✅ 600 | ❌ 0    | ❌ 0      | **2400** | "How are you?"        |
-| About Ashkan    | ✅ 1800 | ✅ 600 | ❌ 0    | ✅ 800    | **3200** | "What does he think?" |
-| Insight request | ✅ 1800 | ✅ 600 | ✅ 400  | ✅ 800    | **3600** | "Gift ideas for him?" |
-
-**Benefits of Intelligent Detection**:
-
-- ✅ **Automatic optimization**: Only loads necessary context
-- ✅ **Token efficiency**: Saves ~800 tokens when Ashkan isn't mentioned
-- ✅ **No manual toggling**: Detection happens automatically
-- ✅ **Memory always active**: Ensures continuity across all conversations
-- ✅ **Context-aware**: Reference layer activates for pronouns ("he", "him", "his")
-
-## Customizing Detection
-
-To add more trigger keywords, edit `src/lib/promptLayerDetection.ts`:
-
-```typescript
-export function shouldUseReferenceLayer(input: string): boolean {
-  const ashkanKeywords = [
-    "ashkan",
-    "boyfriend",
-    "partner",
-    // Add more keywords here
-  ];
-
-  // Your custom logic
-  return ashkanKeywords.some((keyword) =>
-    input.toLowerCase().includes(keyword),
-  );
-}
-```
+| Layer          | Who edits    | Who views                 | Activation  |
+| -------------- | ------------ | ------------------------- | ----------- |
+| Core           | Creator      | Nobody (system)           | Always      |
+| Main User      | User + AI    | User                      | Always      |
+| Reference      | Partner + AI | System only               | Conditional |
+| Shared Memory  | AI only      | Both partners             | Always      |
+| Shared Insight | AI only      | Both partners (dashboard) | Conditional |
+| Relationship   | Creator      | System only               | Conditional |
 
 ## Future Enhancements
 
-Potential improvements:
-
 - ~~Dynamic layer selection based on conversation context~~ ✅ **IMPLEMENTED**
-- Machine learning-based context detection for improved accuracy
-- User preferences to manually override detection per chat
-- Admin panel to view/modify detection keywords
+- ~~Dynamic Reference prompt (partner profile builder)~~ ✅ **IMPLEMENTED**
+- ~~Server-side layer detection~~ ✅ **IMPLEMENTED**
+- Per-user Main User profile from `user_profiles` table
+- AI self-updating user profiles (tone, emotional patterns, interests)
+- Personality quiz → AI generates Main User profile
+- Shared code system for partner profile exchange
+- `shared_memory` table — AI writes, both partners read
+- Insight dashboard — each partner sees what the other needs
+- Admin panel for detection keywords and profile management
 - Token usage analytics per layer and conversation
-- A/B testing different detection strategies
