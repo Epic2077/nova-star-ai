@@ -20,8 +20,8 @@ export default function SettingAccountLayout({
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>
-            <BreadcrumbLink href="/" className="text-base">
-              Home
+            <BreadcrumbLink href="/chat" className="text-base">
+              Chat
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
