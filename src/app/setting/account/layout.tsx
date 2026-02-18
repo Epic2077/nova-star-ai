@@ -24,6 +24,7 @@ export default function SettingAccountLayout({
               Home
             </BreadcrumbLink>
           </BreadcrumbItem>
+          <BreadcrumbSeparator />
           <BreadcrumbItem>
             <BreadcrumbLink href="/setting/account" className="text-base">
               Settings
