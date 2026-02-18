@@ -138,11 +138,7 @@ export default function CreatorChatsPage() {
                   </p>
                 ) : (
                   mappedMessages.map((message) => (
-                    <MessageItem
-                      key={message.id}
-                      message={message}
-                      animate={false}
-                    />
+                    <MessageItem key={message.id} message={message} />
                   ))
                 )}
               </div>
