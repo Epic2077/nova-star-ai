@@ -2,9 +2,9 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
-import { featureInfoType } from "@/types/landing";
+import { FeatureInfo } from "@/types/landing";
 
-function FeatureCard({ icon, title, description }: featureInfoType) {
+function FeatureCard({ icon, title, description }: FeatureInfo) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}

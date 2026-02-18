@@ -1,11 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
-import type { SupabaseCookieMethods } from "@/types/supabase";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
 
 type ChatRow = {
   id: string;
@@ -21,6 +15,10 @@ type MessageRow = {
   created_at: string;
 };
 
+type UserIdLookupResult = {
+  id: string;
+};
+
 export async function GET(request: NextRequest) {
   try {
     const email = request.nextUrl.searchParams
@@ -32,16 +30,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Email is required" }, { status: 400 });
     }
 
-    const authClient = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll() {
-          // no-op for this route
-        },
-      } as SupabaseCookieMethods,
-    });
+    const authClient = createAuthClient(request);
 
     const {
       data: { user },
@@ -52,7 +41,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const service = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const service = createServiceClient();
+    if (!service) {
+      return NextResponse.json(
+        { error: "Server misconfiguration" },
+        { status: 500 },
+      );
+    }
 
     const { data: requesterProfile } = await service
       .from("profiles")
@@ -71,7 +66,16 @@ export async function GET(request: NextRequest) {
 
     // Fallback: if the RPC doesn't exist yet, use the admin API with a filter
     let targetUser;
-    if (listError || !usersById) {
+    const userIdFromRpc =
+      !listError &&
+      usersById &&
+      typeof usersById === "object" &&
+      "id" in usersById &&
+      typeof usersById.id === "string"
+        ? (usersById as UserIdLookupResult).id
+        : null;
+
+    if (!userIdFromRpc) {
       // Fallback to listing, but this is O(n) — add the RPC for production use
       const { data: listedUsers, error: fallbackError } =
         await service.auth.admin.listUsers({
@@ -92,7 +96,7 @@ export async function GET(request: NextRequest) {
     } else {
       // RPC returned a user id — fetch the full user object
       const { data: userData, error: userError } =
-        await service.auth.admin.getUserById(usersById.id);
+        await service.auth.admin.getUserById(userIdFromRpc);
       if (!userError && userData?.user) {
         targetUser = userData.user;
       }

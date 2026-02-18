@@ -8,7 +8,7 @@ export type SupabaseUserMetadata = {
   email_verified: boolean;
   full_name: string;
   phone_verified: boolean;
-  role: "user" | "admin" | string;
+  role: string;
   sub: string;
   avatar?: string;
 };
@@ -18,7 +18,7 @@ export type SupabaseIdentityData = {
   email_verified: boolean;
   full_name: string;
   phone_verified: boolean;
-  role: "user" | "admin" | string;
+  role: string;
   sub: string;
 };
 

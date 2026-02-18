@@ -1,16 +1,10 @@
-export type AdminMessage = {
-  id: string;
-  chat_id: string;
-  role: "user" | "assistant";
-  content: string;
-  created_at: string;
-};
+import type { MessageRecord } from "./chat";
 
 export type AdminChat = {
   id: string;
   title: string;
   created_at: string;
-  messages: AdminMessage[];
+  messages: MessageRecord[];
 };
 
 export type AdminResponse = {

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
@@ -27,6 +27,21 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  useEffect(() => {
+    const onPageLoad = () => {
+      const textarea = document.querySelector("textarea");
+      if (textarea) {
+        textarea.focus();
+        textarea.select();
+      }
+    };
+
+    window.addEventListener("load", onPageLoad);
+    return () => {
+      window.removeEventListener("load", onPageLoad);
+    };
+  }, []);
 
   const handleNewChat = async () => {
     const content = input.trim();

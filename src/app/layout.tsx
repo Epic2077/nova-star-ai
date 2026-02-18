@@ -5,6 +5,7 @@ import { UserProvider } from "@/hooks/useUser";
 import "./globals.css";
 import { ThemeProvider } from "@/components/themeProvider";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { ProfileProvider } from "@/hooks/useProfile";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -86,9 +87,11 @@ export default function RootLayout({
       >
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <UserProvider>
-            {children}
-            <SpeedInsights />
-            <Toaster position="top-center" />
+            <ProfileProvider>
+              {children}
+              <SpeedInsights />
+              <Toaster position="top-center" />
+            </ProfileProvider>
           </UserProvider>
         </ThemeProvider>
       </body>

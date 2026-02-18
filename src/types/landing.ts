@@ -1,7 +1,7 @@
-type featureInfoType = {
+type FeatureInfo = {
   title: string;
   description: string;
   icon: React.ReactNode;
 };
 
-export type { featureInfoType };
+export type { FeatureInfo };

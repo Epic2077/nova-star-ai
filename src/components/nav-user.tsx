@@ -6,6 +6,7 @@ import {
   LogOut,
   MoonIcon,
   SunIcon,
+  ToolCase,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -29,6 +30,7 @@ import { toast } from "sonner";
 import { Skeleton } from "./ui/skeleton";
 import { Switch } from "./ui/switch";
 import { useTheme } from "next-themes";
+import { useProfile } from "@/hooks/useProfile";
 
 export function NavUser({
   user,
@@ -44,6 +46,7 @@ export function NavUser({
   const { isMobile } = useSidebar();
   const { signOut } = useUser();
   const { setTheme, theme } = useTheme();
+  const { role } = useProfile();
 
   const handleLogout = async () => {
     try {
@@ -115,7 +118,9 @@ export function NavUser({
             <DropdownMenuSeparator />
 
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => (window.location.href = "/setting/account")}
+              >
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>
@@ -143,6 +148,16 @@ export function NavUser({
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
+            {role === "admin" && (
+              <DropdownMenuGroup>
+                <DropdownMenuItem
+                  onClick={() => (window.location.href = "/creator/user")}
+                >
+                  <ToolCase />
+                  Admin Management
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+            )}
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
               Log out

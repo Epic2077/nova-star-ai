@@ -1,20 +1,22 @@
+export type MessageRole = "user" | "assistant";
+
 export type Message = {
   id: string;
-  role: "user" | "assistant";
+  role: MessageRole;
   content: string;
 };
 
 export type MessageRecord = {
   id: string;
   chat_id: string;
-  role: "user" | "assistant";
+  role: MessageRole;
   content: string;
   created_at: string;
 };
 
 export type NewMessagePayload = {
   chat_id: string;
-  role: "user" | "assistant";
+  role: MessageRole;
   content: string;
 };
 

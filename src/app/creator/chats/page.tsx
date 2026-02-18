@@ -20,6 +20,7 @@ import MessageItem from "@/components/chat/message/Message";
 import type { Message } from "@/types/chat";
 import type { AdminChat } from "@/types/admin";
 import { useCreatorAdmin } from "@/components/creator/CreatorAdminContext";
+import { formatTimestamp } from "@/lib/formatTimestamp";
 
 export default function CreatorChatsPage() {
   const { result } = useCreatorAdmin();
@@ -97,7 +98,9 @@ export default function CreatorChatsPage() {
                           <TableCell className="font-medium">
                             {chat.title || "Untitled Chat"}
                           </TableCell>
-                          <TableCell>{chat.created_at}</TableCell>
+                          <TableCell>
+                            {formatTimestamp(chat.created_at)}
+                          </TableCell>
                           <TableCell className="text-right">
                             {chat.messages.length}
                           </TableCell>

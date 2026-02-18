@@ -1,3 +1,4 @@
+import Aside from "@/components/account/Aside";
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -6,7 +7,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
-import { Meteors } from "@/components/ui/meteors";
+import { Separator } from "@/components/ui/separator";
 
 const SettingAccountLayout = ({ children }: { children: React.ReactNode }) => {
   return (
@@ -33,11 +34,14 @@ const SettingAccountLayout = ({ children }: { children: React.ReactNode }) => {
                 Manage your personal information and preferences
               </p>
             </div>
-            {children}
+            <Separator />
+            <div className="flex flex-col md:flex-row">
+              <Aside />
+              <div>{children}</div>
+            </div>
           </div>
         </div>
       </div>
-      <Meteors number={20} />
     </section>
   );
 };

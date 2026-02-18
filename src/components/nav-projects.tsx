@@ -54,6 +54,13 @@ export function NavProjects({
             </div>
           </SidebarMenuItem>
         ) : null}
+        {!isLoading && chats.length === 0 ? (
+          <SidebarMenuItem>
+            <div className="px-3 py-3 text-sm text-muted-foreground">
+              No chats yet. Start a new conversation!
+            </div>
+          </SidebarMenuItem>
+        ) : null}
         {chats.map((item) => (
           <SidebarMenuItem key={item.id}>
             <SidebarMenuButton asChild>

@@ -11,6 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useCreatorAdmin } from "@/components/creator/CreatorAdminContext";
+import { formatTimestamp } from "@/lib/formatTimestamp";
 
 function ObjectTable({
   data,
@@ -75,11 +76,15 @@ export default function CreatorUserPage() {
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Created</TableCell>
-                    <TableCell>{result.user.created_at}</TableCell>
+                    <TableCell>
+                      {formatTimestamp(result.user.created_at)}
+                    </TableCell>
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Last Sign In</TableCell>
-                    <TableCell>{result.user.last_sign_in_at ?? "-"}</TableCell>
+                    <TableCell>
+                      {formatTimestamp(result.user.last_sign_in_at) ?? "-"}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

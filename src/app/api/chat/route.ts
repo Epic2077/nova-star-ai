@@ -1,38 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
 import { NOVA_CORE_PROMPT } from "@/lib/prompts/novaCore";
 import { NOVA_MEMORY_LAYER_PROMPT } from "@/lib/prompts/novaMemory";
 import { NOVA_INSIGHT_LAYER_PROMPT } from "@/lib/prompts/novaInsight";
 import { NOVA_REFERENCE_PROMPT } from "@/lib/prompts/novaReference";
-import type { SupabaseCookieMethods } from "@/types/supabase";
-
-/**
- * ENV
- */
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_SERVICE_ROLE_KEY) {
-  console.error(
-    "SUPABASE_SERVICE_ROLE_KEY is not set — refusing to fall back to anon key.",
-  );
-}
-
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_URL =
-  process.env.DEEPSEEK_API_URL ??
-  "https://api.deepseek.com/v1/chat/completions";
+import { callProvider, type ChatMessage } from "@/lib/ai/provider";
+import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
 
 /**
  * POST /api/chat
  */
 export async function POST(req: NextRequest) {
   try {
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
+    const serviceClient = createServiceClient();
+    if (!serviceClient) {
       return NextResponse.json(
         { error: "Server misconfiguration" },
         { status: 500 },
@@ -42,16 +22,7 @@ export async function POST(req: NextRequest) {
     /**
      * 0️⃣ Authenticate caller
      */
-    const authClient = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {
-          // no-op for API route
-        },
-      } as SupabaseCookieMethods,
-    });
+    const authClient = createAuthClient(req);
 
     const {
       data: { user },
@@ -62,7 +33,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = serviceClient;
 
     const {
       content,
@@ -172,87 +143,25 @@ export async function POST(req: NextRequest) {
 
     const truncatedHistory = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
 
-    const messages = [
+    const messages: ChatMessage[] = [
       { role: "system", content: systemMsg },
-      ...truncatedHistory,
+      ...(truncatedHistory as ChatMessage[]),
       { role: "user", content },
     ];
 
     /**
      * 4️⃣ Call Provider
      */
-    let assistantText = "";
+    const result = await callProvider(messages, { provider, model });
 
-    if (provider === "deepseek") {
-      if (!DEEPSEEK_KEY) {
-        return NextResponse.json(
-          { error: "DeepSeek API key missing" },
-          { status: 500 },
-        );
-      }
-
-      const resp = await fetch(DEEPSEEK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DEEPSEEK_KEY}`,
-        },
-        body: JSON.stringify({
-          model: model ?? "deepseek-chat",
-          messages,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errorText = await resp.text();
-        console.error("DeepSeek error:", errorText);
-        return NextResponse.json(
-          { error: "DeepSeek request failed" },
-          { status: 500 },
-        );
-      }
-
-      const payload = await resp.json();
-      assistantText = payload.choices?.[0]?.message?.content ?? "";
-    } else {
-      /**
-       * OPENAI (modern Responses API)
-       * Safe for when you switch later
-       */
-      if (!OPENAI_KEY) {
-        return NextResponse.json(
-          { error: "OpenAI API key missing" },
-          { status: 500 },
-        );
-      }
-
-      const resp = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_KEY}`,
-        },
-        body: JSON.stringify({
-          model: model ?? "gpt-4.1-mini",
-          input: messages,
-          temperature: 0.7,
-        }),
-      });
-
-      if (!resp.ok) {
-        const errorText = await resp.text();
-        console.error("OpenAI error:", errorText);
-        return NextResponse.json(
-          { error: "OpenAI request failed" },
-          { status: 500 },
-        );
-      }
-
-      const payload = await resp.json();
-      assistantText =
-        payload.output?.[0]?.content?.[0]?.text ?? payload.output_text ?? "";
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
     }
+
+    const assistantText = result.text;
 
     /**
      * 5️⃣ Save assistant reply
@@ -316,7 +225,7 @@ ${conversationText}
 
 SUMMARY:`;
 
-          const summaryMessages = [
+          const summaryMessages: ChatMessage[] = [
             {
               role: "system",
               content: "You are a memory system for Nova Star AI.",
@@ -324,51 +233,13 @@ SUMMARY:`;
             { role: "user", content: summaryPrompt },
           ];
 
-          let summaryText = "";
+          const summaryResult = await callProvider(summaryMessages, {
+            provider,
+            model,
+            temperature: 0.5,
+          });
 
-          if (provider === "deepseek" && DEEPSEEK_KEY) {
-            const summaryResp = await fetch(DEEPSEEK_URL, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${DEEPSEEK_KEY}`,
-              },
-              body: JSON.stringify({
-                model: model ?? "deepseek-chat",
-                messages: summaryMessages,
-                temperature: 0.5,
-              }),
-            });
-
-            if (summaryResp.ok) {
-              const summaryPayload = await summaryResp.json();
-              summaryText = summaryPayload.choices?.[0]?.message?.content ?? "";
-            }
-          } else if (OPENAI_KEY) {
-            const summaryResp = await fetch(
-              "https://api.openai.com/v1/responses",
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${OPENAI_KEY}`,
-                },
-                body: JSON.stringify({
-                  model: model ?? "gpt-4.1-mini",
-                  input: summaryMessages,
-                  temperature: 0.5,
-                }),
-              },
-            );
-
-            if (summaryResp.ok) {
-              const summaryPayload = await summaryResp.json();
-              summaryText =
-                summaryPayload.output?.[0]?.content?.[0]?.text ??
-                summaryPayload.output_text ??
-                "";
-            }
-          }
+          const summaryText = summaryResult.ok ? summaryResult.text : "";
 
           if (summaryText) {
             const existingSummary = chatData?.memory_summary || "";

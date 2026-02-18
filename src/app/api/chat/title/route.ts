@@ -1,27 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
-import type { SupabaseCookieMethods } from "@/types/supabase";
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-if (!SUPABASE_SERVICE_ROLE_KEY) {
-  console.error(
-    "SUPABASE_SERVICE_ROLE_KEY is not set — refusing to fall back to anon key.",
-  );
-}
-
-const OPENAI_KEY = process.env.OPENAI_API_KEY;
-const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
-const DEEPSEEK_URL =
-  process.env.DEEPSEEK_API_URL ??
-  "https://api.deepseek.com/v1/chat/completions";
+import { callProvider } from "@/lib/ai/provider";
+import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
 
 export async function POST(req: NextRequest) {
   try {
-    if (!SUPABASE_SERVICE_ROLE_KEY) {
+    const serviceClient = createServiceClient();
+    if (!serviceClient) {
       return NextResponse.json(
         { error: "Server misconfiguration" },
         { status: 500 },
@@ -31,16 +15,7 @@ export async function POST(req: NextRequest) {
     /**
      * Authenticate caller
      */
-    const authClient = createServerClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      cookies: {
-        getAll() {
-          return req.cookies.getAll();
-        },
-        setAll() {
-          // no-op for API route
-        },
-      } as SupabaseCookieMethods,
-    });
+    const authClient = createAuthClient(req);
 
     const {
       data: { user },
@@ -51,7 +26,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const supabase = serviceClient;
 
     const {
       chatId,
@@ -86,77 +61,21 @@ export async function POST(req: NextRequest) {
 
     const titlePrompt = `Generate a short, concise title (3-6 words max) for this conversation.\nDo not use quotes.\nDo not add punctuation.\nConversation:\n${firstUserMessage}`;
 
-    let titleText = "";
+    const result = await callProvider(titlePrompt, {
+      provider,
+      model,
+      temperature: 0.0,
+    });
 
-    if (provider === "deepseek") {
-      if (!DEEPSEEK_KEY) {
-        return NextResponse.json(
-          { error: "DeepSeek API key missing" },
-          { status: 500 },
-        );
-      }
-
-      const resp = await fetch(DEEPSEEK_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${DEEPSEEK_KEY}`,
-        },
-        body: JSON.stringify({
-          model: model ?? "deepseek-chat",
-          messages: [{ role: "user", content: titlePrompt }],
-          temperature: 0.0,
-        }),
-      });
-
-      if (!resp.ok) {
-        const txt = await resp.text();
-        console.error("DeepSeek title error:", txt);
-        return NextResponse.json(
-          { error: "Title generation failed" },
-          { status: 500 },
-        );
-      }
-
-      const payload = await resp.json();
-      titleText = payload.choices?.[0]?.message?.content ?? "";
-    } else {
-      if (!OPENAI_KEY) {
-        return NextResponse.json(
-          { error: "OpenAI API key missing" },
-          { status: 500 },
-        );
-      }
-
-      const resp = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${OPENAI_KEY}`,
-        },
-        body: JSON.stringify({
-          model: model ?? "gpt-4.1-mini",
-          input: titlePrompt,
-          temperature: 0.0,
-        }),
-      });
-
-      if (!resp.ok) {
-        const txt = await resp.text();
-        console.error("OpenAI title error:", txt);
-        return NextResponse.json(
-          { error: "Title generation failed" },
-          { status: 500 },
-        );
-      }
-
-      const payload = await resp.json();
-      titleText =
-        payload.output?.[0]?.content?.[0]?.text ?? payload.output_text ?? "";
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
     }
 
     // sanitize and enforce 3-6 words (best-effort): remove quotes/punctuation and trim
-    let title = String(titleText || "")
+    let title = String(result.text || "")
       .split("\n")[0]
       .trim();
     // remove surrounding quotes and punctuation

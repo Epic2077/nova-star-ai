@@ -1,8 +1,13 @@
 import { SignupForm } from "@/components/login/SignUpForm";
 import { HeartIcon } from "lucide-react";
 import Link from "next/link";
+import type { Metadata } from "next";
 
-const page = () => {
+export const metadata: Metadata = {
+  title: "Sign Up",
+};
+
+export default function SignupPage() {
   return (
     <section className="relative min-h-screen overflow-hidden flex items-center justify-center bg-background">
       <div className="absolute inset-0">
@@ -30,6 +35,4 @@ const page = () => {
       </div>
     </section>
   );
-};
-
-export default page;
+}

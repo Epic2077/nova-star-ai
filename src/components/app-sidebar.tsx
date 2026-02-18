@@ -15,7 +15,7 @@ import {
 import { useUser } from "@/hooks/useUser";
 import NewChat from "./ui/newChat";
 import { toast } from "sonner";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Chat } from "@/types/chat";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -32,6 +32,8 @@ import { Input } from "@/components/ui/input";
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { user, isLoading } = useUser();
   const router = useRouter();
+  const params = useParams<{ dataId?: string }>();
+  const activeChatId = params?.dataId;
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const [chatData, setChatData] = React.useState<Chat[]>([]);
   const [isChatsLoading, setIsChatsLoading] = React.useState(true);
@@ -41,6 +43,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     currentTitle: string;
   }>({ isOpen: false, chatId: "", currentTitle: "" });
   const [newTitle, setNewTitle] = React.useState("");
+  const [deleteDialog, setDeleteDialog] = React.useState<{
+    isOpen: boolean;
+    chatId: string;
+    chatTitle: string;
+  }>({ isOpen: false, chatId: "", chatTitle: "" });
 
   React.useEffect(() => {
     if (!user?.id) {
@@ -224,6 +231,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   };
 
   const handleChatDelete = async (chatId: string) => {
+    // Find the chat title for the confirmation dialog
+    const chat = chatData.find((c) => c.id === chatId);
+    setDeleteDialog({
+      isOpen: true,
+      chatId,
+      chatTitle: chat?.title ?? "this chat",
+    });
+  };
+
+  const handleConfirmDelete = async () => {
+    const { chatId } = deleteDialog;
+
     if (!user?.id) {
       toast.error("You need to be logged in to delete a chat.");
       return;
@@ -242,8 +261,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
     setChatData((previous) => previous.filter((chat) => chat.id !== chatId));
 
-    router.replace("/chat");
+    // Only navigate away if the user deleted the chat they are currently viewing
+    if (activeChatId === chatId) {
+      router.replace("/chat");
+    }
+
     toast.success("Chat deleted");
+    setDeleteDialog({ isOpen: false, chatId: "", chatTitle: "" });
   };
 
   const navUser = user
@@ -263,9 +287,13 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <TeamSwitcher />
         </SidebarHeader>
         <SidebarContent>
-          <div onClick={handleNewChat}>
+          <button
+            onClick={handleNewChat}
+            className="w-full text-left cursor-pointer"
+            aria-label="Start a new chat"
+          >
             <NewChat />
-          </div>
+          </button>
           <NavProjects
             chats={chatData}
             isLoading={isChatsLoading}
@@ -312,6 +340,40 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               className="bg-primary text-muted hover:bg-secondary cursor-pointer"
             >
               Rename
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={deleteDialog.isOpen}
+        onOpenChange={(open) =>
+          setDeleteDialog({ ...deleteDialog, isOpen: open })
+        }
+      >
+        <DialogContent className="bg-card">
+          <DialogHeader>
+            <DialogTitle>Delete Chat</DialogTitle>
+            <DialogDescription className="text-foreground">
+              Are you sure you want to delete &quot;{deleteDialog.chatTitle}
+              &quot;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              className="bg-muted cursor-pointer"
+              onClick={() =>
+                setDeleteDialog({ isOpen: false, chatId: "", chatTitle: "" })
+              }
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              className="cursor-pointer"
+            >
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
