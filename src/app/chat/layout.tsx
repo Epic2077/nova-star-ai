@@ -3,6 +3,8 @@ import ChatHeader from "@/components/chat/Header";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import OnboardingQuizModal from "@/components/quiz/OnboardingQuizModal";
+import PartnerConnectPopup from "@/components/quiz/PartnerConnectPopup";
 import "katex/dist/katex.min.css";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -23,6 +25,8 @@ const Layout = ({ children }: { children: React.ReactNode }) => {
           <ErrorBoundary>{children}</ErrorBoundary>
         </SidebarInset>
       </SidebarProvider>
+      <OnboardingQuizModal />
+      <PartnerConnectPopup />
     </div>
   );
 };
