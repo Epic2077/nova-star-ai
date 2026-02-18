@@ -2,19 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { NOVA_CORE_PROMPT } from "@/lib/prompts/novaCore";
 import { NOVA_MEMORY_LAYER_PROMPT } from "@/lib/prompts/novaMemory";
 import { NOVA_INSIGHT_LAYER_PROMPT } from "@/lib/prompts/novaInsight";
-import { NOVA_REFERENCE_PROMPT } from "@/lib/prompts/novaReference";
+import { buildRelationshipPrompt } from "@/lib/prompts/novaRelationship";
+import { buildReferencePrompt } from "@/lib/prompts/novaReference";
 import {
-  callProvider,
-  callProviderStream,
-  type ChatMessage,
-} from "@/lib/ai/provider";
+  fetchPartnerProfile,
+  fetchActivePartnership,
+} from "@/lib/supabase/partnership";
+import {
+  fetchSharedMemories,
+  formatSharedMemories,
+} from "@/lib/supabase/sharedMemory";
+import {
+  fetchSharedInsights,
+  formatSharedInsights,
+} from "@/lib/supabase/sharedInsight";
+import { buildMainUserPrompt } from "@/lib/prompts/novaMainUser";
+import {
+  shouldUseRelationshipLayer,
+  shouldUseInsightLayer,
+} from "@/lib/promptLayerDetection";
+import { callProviderStream, type ChatMessage } from "@/lib/ai/provider";
 import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { ensureUserProfile, toUserProfile } from "@/lib/supabase/userProfile";
 import {
   searchWeb,
   formatSearchResults,
   extractSearchQuery,
 } from "@/lib/ai/webSearch";
+import { runMemorySummarization } from "@/lib/ai/memorySummarization";
+import { runMemoryExtraction } from "@/lib/ai/memoryExtraction";
 import type { FileAttachment, ToolResult, MessageMetadata } from "@/types/chat";
 
 /**
@@ -52,8 +68,6 @@ export async function POST(req: NextRequest) {
       provider = "deepseek", // default to deepseek for now
       model,
       useMemoryLayer = true, // always on for user continuity
-      useInsightLayer = false,
-      useReferenceLayer = false,
       useWebSearch = false,
       useDeepThinking = false,
       attachments = [] as FileAttachment[],
@@ -66,14 +80,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Auto-detect which prompt layers to activate (server-side)
+    // (relationship detection moved after partner profile load)
+    const useInsightLayer = shouldUseInsightLayer(content);
+
     /**
-     * 0.5️⃣ Verify chatId belongs to authenticated user
+     * 0.5️⃣ Verify chatId belongs to authenticated user & load user profile
      */
-    const { data: chatOwner, error: ownerError } = await supabase
-      .from("chats")
-      .select("user_id")
-      .eq("id", chatId)
-      .single();
+    const fallbackName =
+      user.user_metadata?.full_name ?? user.email?.split("@")[0] ?? "there";
+
+    const [
+      { data: chatOwner, error: ownerError },
+      userProfileRow,
+      partnerProfile,
+      activePartnership,
+    ] = await Promise.all([
+      supabase.from("chats").select("user_id").eq("id", chatId).single(),
+      ensureUserProfile(supabase, user.id, fallbackName),
+      fetchPartnerProfile(supabase, user.id),
+      fetchActivePartnership(supabase, user.id),
+    ]);
 
     if (ownerError || !chatOwner) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
@@ -82,6 +109,11 @@ export async function POST(req: NextRequest) {
     if (chatOwner.user_id !== user.id) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+
+    // Detect relationship layer using partner name from DB
+    const useRelationshipLayer = shouldUseRelationshipLayer(content, {
+      partnerNames: partnerProfile ? [partnerProfile.name] : [],
+    });
 
     /**
      * 1️⃣ Get conversation history
@@ -162,11 +194,39 @@ export async function POST(req: NextRequest) {
         ? `\n\nPREVIOUS CONVERSATION MEMORY:\n${chatData.memory_summary}`
         : "";
 
+    // Load cross-chat shared memories and insights if partnership exists
+    const hasActivePartnership = activePartnership?.status === "active";
+
+    const [sharedMemories, sharedInsights] = hasActivePartnership
+      ? await Promise.all([
+          useMemoryLayer
+            ? fetchSharedMemories(supabase, activePartnership.id)
+            : [],
+          useInsightLayer
+            ? fetchSharedInsights(supabase, activePartnership.id)
+            : [],
+        ])
+      : [[], []];
+
+    const sharedMemoryContext = formatSharedMemories(sharedMemories);
+    const sharedInsightContext = formatSharedInsights(sharedInsights);
+
+    const userProfile = toUserProfile(userProfileRow);
+
     const layeredSystemPrompt = [
       NOVA_CORE_PROMPT,
+      buildMainUserPrompt(userProfile),
       useMemoryLayer ? NOVA_MEMORY_LAYER_PROMPT : null,
       useInsightLayer ? NOVA_INSIGHT_LAYER_PROMPT : null,
-      useReferenceLayer ? NOVA_REFERENCE_PROMPT : null,
+      useRelationshipLayer && partnerProfile
+        ? buildRelationshipPrompt({
+            creatorName: userProfile.name,
+            partnerName: partnerProfile.name,
+          })
+        : null,
+      useRelationshipLayer && partnerProfile
+        ? buildReferencePrompt(partnerProfile)
+        : null,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -202,7 +262,12 @@ export async function POST(req: NextRequest) {
     }
 
     const systemMsg =
-      layeredSystemPrompt + memoryContext + webSearchContext + fileContext;
+      layeredSystemPrompt +
+      memoryContext +
+      sharedMemoryContext +
+      sharedInsightContext +
+      webSearchContext +
+      fileContext;
 
     const truncatedHistory = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
 
@@ -298,6 +363,16 @@ export async function POST(req: NextRequest) {
             provider,
             model,
           );
+
+          // Fire-and-forget memory extraction (writes to DB tables)
+          void runMemoryExtraction(
+            supabase,
+            chatId,
+            user.id,
+            activePartnership,
+            provider,
+            model,
+          );
         } catch (err) {
           console.error("Streaming error:", err);
           sendEvent("error", { error: "Streaming failed" });
@@ -320,93 +395,5 @@ export async function POST(req: NextRequest) {
       { error: "Unexpected server error" },
       { status: 500 },
     );
-  }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Memory summarization helper                                        */
-/* ------------------------------------------------------------------ */
-
-async function runMemorySummarization(
-  supabase: SupabaseClient,
-  chatId: string,
-  chatData: { memory_summary?: string | null } | null,
-  provider: string,
-  model: string | undefined,
-) {
-  try {
-    const { count } = await supabase
-      .from("messages")
-      .select("*", { count: "exact", head: true })
-      .eq("chat_id", chatId);
-
-    if (!count || count % 20 !== 0) return;
-
-    const { data: last20Messages } = await supabase
-      .from("messages")
-      .select("role, content, created_at")
-      .eq("chat_id", chatId)
-      .order("created_at", { ascending: true })
-      .range(count - 20, count - 1);
-
-    if (!last20Messages || last20Messages.length === 0) return;
-
-    const conversationText = last20Messages
-      .map(
-        (msg: { role: string; content: string }) =>
-          `${msg.role.toUpperCase()}: ${msg.content}`,
-      )
-      .join("\n\n");
-
-    const summaryPrompt = `You are a memory summarization system for Nova Star AI. Generate a concise but comprehensive summary of the following 20-message conversation segment. Focus on:
-- Key topics discussed
-- Emotional patterns
-- Important information shared (preferences, dates, names, etc.)
-- Relationship dynamics
-- Any ongoing concerns or themes
-
-Do not include every detail, but capture what matters for future continuity.
-
-CONVERSATION:
-${conversationText}
-
-SUMMARY:`;
-
-    const summaryMessages: ChatMessage[] = [
-      {
-        role: "system",
-        content: "You are a memory system for Nova Star AI.",
-      },
-      { role: "user", content: summaryPrompt },
-    ];
-
-    const summaryResult = await callProvider(summaryMessages, {
-      provider: provider as "deepseek" | "openai",
-      model,
-      temperature: 0.5,
-    });
-
-    const summaryText = summaryResult.ok ? summaryResult.text : "";
-
-    if (summaryText) {
-      const existingSummary = chatData?.memory_summary || "";
-      const updatedSummary = existingSummary
-        ? `${existingSummary}\n\n---\n\nSegment ${count / 20}:\n${summaryText}`
-        : `Segment 1:\n${summaryText}`;
-
-      await supabase
-        .from("chats")
-        .update({
-          memory_summary: updatedSummary,
-          memory_updated_at: new Date().toISOString(),
-        })
-        .eq("id", chatId);
-
-      console.log(
-        `Generated memory summary for chat ${chatId} at message ${count}`,
-      );
-    }
-  } catch (summaryError) {
-    console.error("Memory summarization error:", summaryError);
   }
 }

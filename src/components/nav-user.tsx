@@ -6,6 +6,7 @@ import {
   LogOut,
   MoonIcon,
   SunIcon,
+  Sparkles,
   ToolCase,
 } from "lucide-react";
 
@@ -123,6 +124,12 @@ export function NavUser({
               >
                 <BadgeCheck />
                 Account
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => (window.location.href = "/profile")}
+              >
+                <Sparkles />
+                Nova Profile
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuGroup>

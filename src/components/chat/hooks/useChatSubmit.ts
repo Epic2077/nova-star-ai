@@ -3,10 +3,6 @@ import { Message } from "@/types/chat";
 import type { FileAttachment } from "@/types/chat";
 import type { ToolToggles } from "../ChatToolbar";
 import { toast } from "sonner";
-import {
-  shouldUseReferenceLayer,
-  shouldUseInsightLayer,
-} from "@/lib/promptLayerDetection";
 
 interface UseChatSubmitParams {
   chatId: string | undefined;
@@ -89,8 +85,6 @@ export function useChatSubmit({
       const body = {
         chatId,
         content,
-        useReferenceLayer: shouldUseReferenceLayer(content),
-        useInsightLayer: shouldUseInsightLayer(content),
         useWebSearch: toolOpts.webSearch,
         useDeepThinking: toolOpts.deepThinking,
         attachments,
