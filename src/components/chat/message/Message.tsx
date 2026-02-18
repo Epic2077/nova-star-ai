@@ -3,18 +3,30 @@ import type { Message } from "@/types/chat";
 import UserBubble from "./ChatBubble";
 import AssistantMessage from "./AssistantMessage";
 
-function Message({
+function MessageItem({
   message,
-  animate,
+  streaming,
 }: {
   message: Message;
-  animate?: boolean;
+  streaming?: boolean;
 }) {
   if (message.role === "user") {
-    return <UserBubble content={message.content} />;
+    return (
+      <UserBubble
+        content={message.content}
+        attachments={message.metadata?.attachments}
+      />
+    );
   }
 
-  return <AssistantMessage content={message.content} animate={animate} />;
+  return (
+    <AssistantMessage
+      content={message.content}
+      thinking={message.metadata?.thinking}
+      toolResults={message.metadata?.toolResults}
+      streaming={streaming}
+    />
+  );
 }
 
-export default memo(Message);
+export default memo(MessageItem);

@@ -53,3 +53,69 @@ ON chats(memory_updated_at);
 - **Long-term Memory**: Preserves important context across hundreds of messages
 - **Automatic**: Runs in the background every 20 messages
 - **Non-blocking**: Summary generation doesn't fail the main request
+
+---
+
+## AI Tools - Message Types, Metadata & File Storage
+
+### SQL Migration
+
+Run this SQL in your Supabase SQL Editor:
+
+```sql
+-- Add type column with check constraint (if not already done)
+ALTER TABLE messages
+ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'text';
+
+ALTER TABLE messages
+ADD CONSTRAINT messages_type_check
+CHECK (type IN ('text', 'image', 'file', 'tool'));
+
+-- Add metadata JSONB column for storing thinking content, tool results, and file attachments
+ALTER TABLE messages
+ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+-- Index for filtering by message type (optional)
+CREATE INDEX IF NOT EXISTS idx_messages_type ON messages(type);
+```
+
+### Supabase Storage Bucket
+
+Create a public storage bucket for file uploads:
+
+1. Go to **Supabase Dashboard > Storage**
+2. Click **New Bucket**
+3. Name: `chat-attachments`
+4. Public: **Yes** (so files can be accessed via URL)
+5. File size limit: **10MB**
+6. Allowed MIME types: `image/*, application/pdf, text/*, application/json, application/msword, application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+
+Or via SQL:
+
+```sql
+INSERT INTO storage.buckets (id, name, public, file_size_limit)
+VALUES ('chat-attachments', 'chat-attachments', true, 10485760);
+```
+
+### Environment Variables
+
+Add these to your `.env.local`:
+
+```env
+# Web Search (Brave Search API - get free key at https://brave.com/search/api/)
+BRAVE_SEARCH_API_KEY=your_brave_search_api_key
+```
+
+### Column Details
+
+- **`type`** (TEXT, default 'text')
+  - `text` — regular text message
+  - `image` — message with image attachment(s)
+  - `file` — message with file attachment(s)
+  - `tool` — message generated using a tool (web search, etc.)
+
+- **`metadata`** (JSONB, nullable)
+  - Stores structured data for advanced features:
+    - `thinking` (string) — chain-of-thought reasoning from deep thinking
+    - `toolResults` (array) — web search results and other tool outputs
+    - `attachments` (array) — file attachment details (name, url, mimeType, size)

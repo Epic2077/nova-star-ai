@@ -3,8 +3,19 @@ import { NOVA_CORE_PROMPT } from "@/lib/prompts/novaCore";
 import { NOVA_MEMORY_LAYER_PROMPT } from "@/lib/prompts/novaMemory";
 import { NOVA_INSIGHT_LAYER_PROMPT } from "@/lib/prompts/novaInsight";
 import { NOVA_REFERENCE_PROMPT } from "@/lib/prompts/novaReference";
-import { callProvider, type ChatMessage } from "@/lib/ai/provider";
+import {
+  callProvider,
+  callProviderStream,
+  type ChatMessage,
+} from "@/lib/ai/provider";
 import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  searchWeb,
+  formatSearchResults,
+  extractSearchQuery,
+} from "@/lib/ai/webSearch";
+import type { FileAttachment, ToolResult, MessageMetadata } from "@/types/chat";
 
 /**
  * POST /api/chat
@@ -43,6 +54,9 @@ export async function POST(req: NextRequest) {
       useMemoryLayer = true, // always on for user continuity
       useInsightLayer = false,
       useReferenceLayer = false,
+      useWebSearch = false,
+      useDeepThinking = false,
+      attachments = [] as FileAttachment[],
     } = await req.json();
 
     if (!content || !chatId) {
@@ -100,13 +114,31 @@ export async function POST(req: NextRequest) {
     }
 
     /**
-     * 2️⃣ Save user message
+     * 2️⃣ Save user message (with optional file attachments)
      */
-    const { error: insertUserError } = await supabase.from("messages").insert({
-      chat_id: chatId,
-      role: "user",
-      content,
-    });
+    const userMsgMetadata: MessageMetadata | undefined =
+      attachments.length > 0 ? { attachments } : undefined;
+
+    const userMsgType =
+      attachments.length > 0
+        ? attachments.some((a: FileAttachment) =>
+            a.mimeType?.startsWith("image/"),
+          )
+          ? ("image" as const)
+          : ("file" as const)
+        : ("text" as const);
+
+    const { data: insertedUserMsg, error: insertUserError } = await supabase
+      .from("messages")
+      .insert({
+        chat_id: chatId,
+        role: "user",
+        content,
+        type: userMsgType,
+        metadata: userMsgMetadata ?? null,
+      })
+      .select("id, role, content, type, metadata")
+      .single();
 
     if (insertUserError) {
       console.error("User insert error:", insertUserError);
@@ -139,7 +171,38 @@ export async function POST(req: NextRequest) {
       .filter(Boolean)
       .join("\n\n");
 
-    const systemMsg = layeredSystemPrompt + memoryContext;
+    /**
+     * 3.5️⃣ Web Search (if enabled)
+     */
+    let webSearchContext = "";
+    let toolResults: ToolResult[] = [];
+
+    if (useWebSearch) {
+      const query = extractSearchQuery(content);
+      const results = await searchWeb(query);
+
+      if (results.length > 0) {
+        webSearchContext = `\n\n${formatSearchResults(results)}\n\nUse the above search results to inform your response. Cite sources when relevant using [number] notation.`;
+        toolResults = [{ tool: "web_search", query, results }];
+      }
+    }
+
+    /**
+     * 3.6️⃣ File attachment context
+     */
+    let fileContext = "";
+    if (attachments.length > 0) {
+      const fileDescriptions = attachments
+        .map(
+          (a: FileAttachment) =>
+            `- ${a.name} (${a.mimeType}, ${(a.size / 1024).toFixed(1)}KB): ${a.url}`,
+        )
+        .join("\n");
+      fileContext = `\n\nATTACHED FILES:\n${fileDescriptions}\n\nThe user has attached the above files. Reference them in your response as appropriate.`;
+    }
+
+    const systemMsg =
+      layeredSystemPrompt + memoryContext + webSearchContext + fileContext;
 
     const truncatedHistory = (history ?? []).slice(-MAX_HISTORY_MESSAGES);
 
@@ -150,68 +213,152 @@ export async function POST(req: NextRequest) {
     ];
 
     /**
-     * 4️⃣ Call Provider
+     * 4️⃣ Call Provider — always stream via SSE
      */
-    const result = await callProvider(messages, { provider, model });
+    const encoder = new TextEncoder();
 
-    if (!result.ok) {
-      return NextResponse.json(
-        { error: result.error },
-        { status: result.status },
-      );
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendEvent = (event: string, data: unknown) => {
+          controller.enqueue(
+            encoder.encode(
+              `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+            ),
+          );
+        };
 
-    const assistantText = result.text;
+        let fullText = "";
+        let fullThinking = "";
 
-    /**
-     * 5️⃣ Save assistant reply
-     */
-    const { error: insertAssistantError } = await supabase
-      .from("messages")
-      .insert({
-        chat_id: chatId,
-        role: "assistant",
-        content: assistantText,
-      });
+        try {
+          for await (const chunk of callProviderStream(messages, {
+            provider,
+            model,
+            deepThinking: useDeepThinking,
+          })) {
+            if (chunk.type === "thinking") {
+              sendEvent("thinking", { text: chunk.text });
+            } else if (chunk.type === "content") {
+              sendEvent("content", { text: chunk.text });
+            } else if (chunk.type === "done") {
+              fullText = chunk.fullText;
+              fullThinking = chunk.fullThinking;
+            } else if (chunk.type === "error") {
+              sendEvent("error", { error: chunk.error });
+              controller.close();
+              return;
+            }
+          }
 
-    if (insertAssistantError) {
-      console.error("Assistant insert error:", insertAssistantError);
-      return NextResponse.json(
-        { error: "Failed to save assistant message" },
-        { status: 500 },
-      );
-    }
+          // Save the completed messages to DB
+          const assistantMetadata: MessageMetadata = {};
+          if (fullThinking) assistantMetadata.thinking = fullThinking;
+          if (toolResults.length > 0)
+            assistantMetadata.toolResults = toolResults;
 
-    /**
-     * 6️⃣ Memory System - Summarize every 20 messages (non-blocking)
-     *
-     * Fire-and-forget: the response is returned immediately while
-     * memory summarization runs in the background.
-     */
+          const hasMetadata =
+            Object.keys(assistantMetadata).length > 0
+              ? assistantMetadata
+              : null;
+
+          const assistantMsgType: "text" | "tool" =
+            toolResults.length > 0 ? "tool" : "text";
+
+          const { data: insertedAssistantMsg, error: insertAssistantError } =
+            await supabase
+              .from("messages")
+              .insert({
+                chat_id: chatId,
+                role: "assistant",
+                content: fullText,
+                type: assistantMsgType,
+                metadata: hasMetadata,
+              })
+              .select("id, role, content, type, metadata")
+              .single();
+
+          if (insertAssistantError) {
+            console.error("Assistant insert error:", insertAssistantError);
+          }
+
+          // Send the final "complete" event with DB record
+          sendEvent("complete", {
+            reply: fullText,
+            thinking: fullThinking || null,
+            toolResults: toolResults.length > 0 ? toolResults : null,
+            userMessage: insertedUserMsg ?? null,
+            assistantMessage: insertedAssistantMsg ?? null,
+          });
+
+          // Fire-and-forget memory summarization
+          void runMemorySummarization(
+            supabase,
+            chatId,
+            chatData,
+            provider,
+            model,
+          );
+        } catch (err) {
+          console.error("Streaming error:", err);
+          sendEvent("error", { error: "Streaming failed" });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        Connection: "keep-alive",
+      },
+    });
+  } catch (err) {
+    console.error("Chat API error:", err);
+    return NextResponse.json(
+      { error: "Unexpected server error" },
+      { status: 500 },
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Memory summarization helper                                        */
+/* ------------------------------------------------------------------ */
+
+async function runMemorySummarization(
+  supabase: SupabaseClient,
+  chatId: string,
+  chatData: { memory_summary?: string | null } | null,
+  provider: string,
+  model: string | undefined,
+) {
+  try {
     const { count } = await supabase
       .from("messages")
       .select("*", { count: "exact", head: true })
       .eq("chat_id", chatId);
 
-    // Generate summary every 20 messages (20, 40, 60, etc.)
-    if (count && count % 20 === 0) {
-      // Run summarization in background — do NOT await
-      void (async () => {
-        try {
-          const { data: last20Messages } = await supabase
-            .from("messages")
-            .select("role, content, created_at")
-            .eq("chat_id", chatId)
-            .order("created_at", { ascending: true })
-            .range(count - 20, count - 1);
+    if (!count || count % 20 !== 0) return;
 
-          if (!last20Messages || last20Messages.length === 0) return;
+    const { data: last20Messages } = await supabase
+      .from("messages")
+      .select("role, content, created_at")
+      .eq("chat_id", chatId)
+      .order("created_at", { ascending: true })
+      .range(count - 20, count - 1);
 
-          const conversationText = last20Messages
-            .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
-            .join("\n\n");
+    if (!last20Messages || last20Messages.length === 0) return;
 
-          const summaryPrompt = `You are a memory summarization system for Nova Star AI. Generate a concise but comprehensive summary of the following 20-message conversation segment. Focus on:
+    const conversationText = last20Messages
+      .map(
+        (msg: { role: string; content: string }) =>
+          `${msg.role.toUpperCase()}: ${msg.content}`,
+      )
+      .join("\n\n");
+
+    const summaryPrompt = `You are a memory summarization system for Nova Star AI. Generate a concise but comprehensive summary of the following 20-message conversation segment. Focus on:
 - Key topics discussed
 - Emotional patterns
 - Important information shared (preferences, dates, names, etc.)
@@ -225,55 +372,41 @@ ${conversationText}
 
 SUMMARY:`;
 
-          const summaryMessages: ChatMessage[] = [
-            {
-              role: "system",
-              content: "You are a memory system for Nova Star AI.",
-            },
-            { role: "user", content: summaryPrompt },
-          ];
+    const summaryMessages: ChatMessage[] = [
+      {
+        role: "system",
+        content: "You are a memory system for Nova Star AI.",
+      },
+      { role: "user", content: summaryPrompt },
+    ];
 
-          const summaryResult = await callProvider(summaryMessages, {
-            provider,
-            model,
-            temperature: 0.5,
-          });
+    const summaryResult = await callProvider(summaryMessages, {
+      provider: provider as "deepseek" | "openai",
+      model,
+      temperature: 0.5,
+    });
 
-          const summaryText = summaryResult.ok ? summaryResult.text : "";
+    const summaryText = summaryResult.ok ? summaryResult.text : "";
 
-          if (summaryText) {
-            const existingSummary = chatData?.memory_summary || "";
-            const updatedSummary = existingSummary
-              ? `${existingSummary}\n\n---\n\nSegment ${count / 20}:\n${summaryText}`
-              : `Segment 1:\n${summaryText}`;
+    if (summaryText) {
+      const existingSummary = chatData?.memory_summary || "";
+      const updatedSummary = existingSummary
+        ? `${existingSummary}\n\n---\n\nSegment ${count / 20}:\n${summaryText}`
+        : `Segment 1:\n${summaryText}`;
 
-            await supabase
-              .from("chats")
-              .update({
-                memory_summary: updatedSummary,
-                memory_updated_at: new Date().toISOString(),
-              })
-              .eq("id", chatId);
+      await supabase
+        .from("chats")
+        .update({
+          memory_summary: updatedSummary,
+          memory_updated_at: new Date().toISOString(),
+        })
+        .eq("id", chatId);
 
-            console.log(
-              `Generated memory summary for chat ${chatId} at message ${count}`,
-            );
-          }
-        } catch (summaryError) {
-          console.error("Memory summarization error:", summaryError);
-        }
-      })();
+      console.log(
+        `Generated memory summary for chat ${chatId} at message ${count}`,
+      );
     }
-
-    /**
-     * 7️⃣ Return response
-     */
-    return NextResponse.json({ reply: assistantText });
-  } catch (err) {
-    console.error("Chat API error:", err);
-    return NextResponse.json(
-      { error: "Unexpected server error" },
-      { status: 500 },
-    );
+  } catch (summaryError) {
+    console.error("Memory summarization error:", summaryError);
   }
 }

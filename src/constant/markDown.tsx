@@ -162,8 +162,8 @@ export function createMarkdownComponents({
           <Image
             src={String(src)}
             alt={alt}
-            width={400}
-            height={400}
+            width={200}
+            height={200}
             className="w-full h-auto object-contain"
             unoptimized
           />
