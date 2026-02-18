@@ -2,14 +2,14 @@
 
 ## High Impact
 
-- [ ] Stop/cancel generation — AbortController + stop button in UI
+- [x] Stop/cancel generation — AbortController + stop button in UI
 - [ ] Image understanding — send uploaded images to vision model (GPT-4o)
 
 ## Medium Impact
 
-- [ ] Message editing & regeneration — edit previous messages, regenerate responses
-- [ ] Code execution tool — sandboxed interpreter for computational questions
-- [ ] Chat export (PDF / Markdown)
+- [x] Message editing & regeneration — edit previous messages, regenerate responses
+- [x] Code execution tool — sandboxed interpreter for computational questions
+- [x] Chat export (PDF / Markdown)
 
 ## Polish
 

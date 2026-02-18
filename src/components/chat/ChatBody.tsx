@@ -46,7 +46,15 @@ const ChatBody = () => {
     generateTitle,
   } = useMessages(chatId);
 
-  const { handleSubmit, submitMessage } = useChatSubmit({
+  const {
+    handleSubmit,
+    submitMessage,
+    stopGeneration,
+    isGenerating,
+    editMessage,
+    regenerateMessage,
+    setAltIndex,
+  } = useChatSubmit({
     chatId,
     messages,
     setMessages,
@@ -160,6 +168,37 @@ const ChatBody = () => {
             <MessageItem
               message={item}
               streaming={item.id === streamingMessageId}
+              onEdit={
+                item.role === "user"
+                  ? (newContent: string) => editMessage(item.id, newContent)
+                  : undefined
+              }
+              onRegenerate={
+                item.role === "assistant" && !isGenerating
+                  ? () => regenerateMessage(item.id)
+                  : undefined
+              }
+              onAltPrev={
+                item.role === "assistant"
+                  ? () =>
+                      setAltIndex(
+                        item.id,
+                        Math.max(0, (item.activeAltIndex ?? 0) - 1),
+                      )
+                  : undefined
+              }
+              onAltNext={
+                item.role === "assistant"
+                  ? () =>
+                      setAltIndex(
+                        item.id,
+                        Math.min(
+                          item.alternatives?.length ?? 0,
+                          (item.activeAltIndex ?? 0) + 1,
+                        ),
+                      )
+                  : undefined
+              }
             />
           </div>
         ))}
@@ -188,7 +227,13 @@ const ChatBody = () => {
       ) : null}
 
       <div className="mt-auto sticky bottom-5">
-        <ChatInput input={input} setInput={setInput} onSubmit={handleSubmit} />
+        <ChatInput
+          input={input}
+          setInput={setInput}
+          onSubmit={handleSubmit}
+          isGenerating={isGenerating}
+          onStop={stopGeneration}
+        />
       </div>
     </section>
   );

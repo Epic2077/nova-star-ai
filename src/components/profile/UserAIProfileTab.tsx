@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Loader2, Save, Sparkles } from "lucide-react";
+import { Loader2, Save, Sparkles, ClipboardList } from "lucide-react";
 import type { UserProfileRow } from "@/types/userProfile";
 import type { PersonalitySummary } from "@/types/userProfile";
 
@@ -23,6 +24,7 @@ interface Props {
 }
 
 export default function UserAIProfileTab({ profile, onSaved }: Props) {
+  const router = useRouter();
   const [name, setName] = useState(profile?.name ?? "");
   const [tone, setTone] = useState(profile?.tone ?? "");
   const [interestsText, setInterestsText] = useState(
@@ -73,11 +75,24 @@ export default function UserAIProfileTab({ profile, onSaved }: Props) {
       {/* Editable fields */}
       <Card>
         <CardHeader>
-          <CardTitle>Your AI Profile</CardTitle>
-          <CardDescription>
-            These fields shape how Nova understands and communicates with you.
-            Edit them anytime — Nova also refines them as you chat.
-          </CardDescription>
+          <div className="flex items-start justify-between">
+            <div>
+              <CardTitle>Your AI Profile</CardTitle>
+              <CardDescription>
+                These fields shape how Nova understands and communicates with
+                you. Edit them anytime — Nova also refines them as you chat.
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1.5"
+              onClick={() => router.push("/quiz?from=profile")}
+            >
+              <ClipboardList className="size-4" />
+              Take Quiz
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-5">
           <div className="grid gap-2">

@@ -4,11 +4,10 @@ import React from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { HeartIcon, MoonIcon, SunIcon } from "lucide-react";
-import { description, name } from "@/constant/landing";
+import { description, name, tagline } from "@/constant/landing";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { Switch } from "../ui/switch";
-import { HoverBorderGradient } from "../ui/hover-border-gradient";
 
 const Hero = () => {
   const { resolvedTheme, setTheme } = useTheme();
@@ -21,7 +20,7 @@ const Hero = () => {
   const isDark = mounted && resolvedTheme === "dark";
 
   return (
-    <section className="relative max-w-6xl mx-auto px-6 py-24 pb-10 text-center overflow-hidden text-foreground">
+    <section className="relative max-w-6xl mx-auto px-6 pt-20 pb-16 text-center overflow-hidden text-foreground">
       {/* top-right theme control */}
       <div className="absolute right-6 top-6 z-20 flex items-center gap-3 bg-muted/40 backdrop-blur rounded-full px-3 py-1 shadow-sm">
         <motion.div
@@ -43,23 +42,37 @@ const Hero = () => {
         />
       </div>
 
-      {/* decorative watermark + heart */}
+      {/* decorative watermark */}
       <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-6 top-8 transform -rotate-12 opacity-10 text-slate-300 dark:text-slate-700 select-none">
-          <span className="text-2xl md:text-4xl italic font-light">
-            love you babe!
-          </span>
-        </div>
-        <HeartIcon className="absolute right-6 top-6 rotate-45 text-6xl md:text-9xl opacity-8 text-pink-300 dark:text-pink-700 blur-sm" />
+        <HeartIcon className="absolute right-12 top-12 rotate-12 size-32 md:size-48 opacity-[0.06] text-pink-400 dark:text-pink-600" />
+        <HeartIcon className="absolute left-8 bottom-8 -rotate-12 size-20 md:size-32 opacity-[0.04] text-indigo-400 dark:text-indigo-600" />
         <div className="absolute inset-0 bg-linear-to-b from-white/60 via-transparent to-transparent dark:from-slate-900/60 dark:via-transparent dark:to-transparent" />
       </div>
 
       <div className="z-10">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5 }}
+          className="mx-auto mb-4 flex size-16 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-500 to-pink-500 shadow-lg"
+        >
+          <HeartIcon className="size-8 text-white" />
+        </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1, duration: 0.5 }}
+          className="text-sm font-medium uppercase tracking-widest text-primary/70"
+        >
+          {tagline}
+        </motion.p>
+
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-5xl md:text-6xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-linear-to-r from-indigo-600 via-pink-500 to-amber-400"
+          transition={{ delay: 0.2, duration: 0.6 }}
+          className="mt-3 text-5xl md:text-7xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-linear-to-r from-indigo-600 via-pink-500 to-amber-400"
         >
           {name}
         </motion.h1>
@@ -67,8 +80,8 @@ const Hero = () => {
         <motion.p
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.6 }}
-          className="mt-6 text-lg md:text-xl text-slate-500 max-w-2xl mx-auto dark:text-foreground"
+          transition={{ delay: 0.35, duration: 0.6 }}
+          className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed"
         >
           {description}
         </motion.p>
@@ -76,28 +89,37 @@ const Hero = () => {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.6 }}
-          className="mt-10 flex justify-center gap-4"
+          transition={{ delay: 0.5, duration: 0.6 }}
+          className="mt-10 flex flex-col sm:flex-row justify-center gap-4"
         >
-          <Link href="/login">
+          <Link href="/signup">
             <Button
               size="lg"
-              className="rounded-2xl px-8 bg-linear-to-r from-primary to-secondary dark:from-indigo-700 dark:to-indigo-400 shadow-lg hover:scale-[1.01] transition-transform text-foreground"
+              className="rounded-2xl px-10 py-6 text-base bg-linear-to-r from-indigo-600 to-pink-500 hover:from-indigo-700 hover:to-pink-600 shadow-lg hover:shadow-xl hover:scale-[1.02] transition-all text-white"
             >
-              Start Chat
+              Get Started Free
             </Button>
           </Link>
 
-          <Link href="/login/creator">
+          <Link href="/login">
             <Button
               variant="outline"
               size="lg"
-              className="rounded-2xl px-8 bg-transparent border-2 border-muted shadow-lg"
+              className="rounded-2xl px-10 py-6 text-base border-2 hover:bg-muted/50 transition-all"
             >
-              Creator Portal
+              Sign In
             </Button>
           </Link>
         </motion.div>
+
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.7, duration: 0.6 }}
+          className="mt-4 text-xs text-muted-foreground"
+        >
+          No credit card required · Free to use
+        </motion.p>
       </div>
     </section>
   );
