@@ -3,7 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
-import { CameraIcon, PlusIcon, SendHorizontalIcon } from "lucide-react";
+import { CameraIcon, PlusIcon, SendHorizontalIcon, Square } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import isRTL from "@/lib/rtlDetect";
@@ -19,9 +19,17 @@ interface ChatInputProps {
     tools?: ToolToggles;
     attachments?: FileAttachment[];
   }) => Promise<void>;
+  isGenerating?: boolean;
+  onStop?: () => void;
 }
 
-const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
+const ChatInput = ({
+  input,
+  setInput,
+  onSubmit,
+  isGenerating = false,
+  onStop,
+}: ChatInputProps) => {
   const maxTextareaHeight = 200;
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
   const rtl = isRTL(input);
@@ -190,14 +198,34 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
               <ChatToolbar tools={tools} onToggle={handleToggle} />
             </div>
 
-            <Button
-              variant="secondary"
-              className="h-9 w-9 rounded-full shadow-lg cursor-pointer"
-              onClick={() => void handleSubmit()}
-              disabled={input.trim().length === 0 && pendingFiles.length === 0}
-            >
-              <SendHorizontalIcon size={18} className="-rotate-90" />
-            </Button>
+            {isGenerating ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    className="h-9 w-9 rounded-full shadow-lg cursor-pointer bg-chat-background hover:bg-destructive text-destructive-foreground"
+                    onClick={onStop}
+                    aria-label="Stop generation"
+                  >
+                    <Square size={14} fill="currentColor" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>Stop generating</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                variant="secondary"
+                className="h-9 w-9 rounded-full shadow-lg cursor-pointer"
+                onClick={() => void handleSubmit()}
+                disabled={
+                  input.trim().length === 0 && pendingFiles.length === 0
+                }
+              >
+                <SendHorizontalIcon size={18} className="-rotate-90" />
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>

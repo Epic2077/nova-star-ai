@@ -23,14 +23,17 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Copy } from "lucide-react";
+import { Copy, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
 import isRTL from "@/lib/rtlDetect";
 import { Vazirmatn } from "next/font/google";
-import type { ToolResult } from "@/types/chat";
+import type { ToolResult, CodeExecutionResult } from "@/types/chat";
+import { executeCode } from "@/lib/codeExecutor";
 import ThinkingBlock from "./ThinkingBlock";
 import WebSearchBlock from "./WebSearchBlock";
+import CodeExecutionBlock from "./CodeExecutionBlock";
+import AnswerCarousel from "./AnswerCarousel";
 
 const vazirmatn = Vazirmatn({ subsets: ["arabic", "latin"], display: "swap" });
 
@@ -38,12 +41,24 @@ export default function AssistantMessage({
   content,
   thinking,
   toolResults,
+  codeResult,
   streaming,
+  altTotal,
+  altCurrent,
+  onAltPrev,
+  onAltNext,
+  onRegenerate,
 }: {
   content: string;
   thinking?: string;
   toolResults?: ToolResult[];
+  codeResult?: CodeExecutionResult;
   streaming?: boolean;
+  altTotal?: number;
+  altCurrent?: number;
+  onAltPrev?: () => void;
+  onAltNext?: () => void;
+  onRegenerate?: () => void;
 }) {
   const { theme } = useTheme();
   const rtl = isRTL(content);
@@ -80,6 +95,17 @@ export default function AssistantMessage({
 
   const containerRef = useRef<HTMLDivElement | null>(null);
 
+  const handleRunCode = useCallback(
+    async (
+      code: string,
+      language: string,
+      onStatus?: (status: string) => void,
+    ): Promise<CodeExecutionResult> => {
+      return executeCode(code, language, onStatus);
+    },
+    [],
+  );
+
   const handleCopy = async () => {
     try {
       const text = containerRef.current?.innerText ?? content ?? "";
@@ -106,15 +132,19 @@ export default function AssistantMessage({
       {toolResults && toolResults.length > 0 && (
         <WebSearchBlock toolResults={toolResults} />
       )}
+      {codeResult && <CodeExecutionBlock result={codeResult} />}
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}
-        components={createMarkdownComponents({ theme })}
+        components={createMarkdownComponents({
+          theme,
+          onRunCode: handleRunCode,
+        })}
       >
         {content}
       </ReactMarkdown>
 
-      <div>
+      <div className="flex items-center gap-1 mt-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -127,6 +157,30 @@ export default function AssistantMessage({
           </TooltipTrigger>
           <TooltipContent>Copy</TooltipContent>
         </Tooltip>
+
+        {onRegenerate && !streaming && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={onRegenerate}
+                aria-label="Regenerate response"
+                className="rounded-full p-1 hover:bg-muted/60"
+              >
+                <RefreshCw size={16} className="text-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Regenerate</TooltipContent>
+          </Tooltip>
+        )}
+
+        {(altTotal ?? 0) > 1 && onAltPrev && onAltNext && (
+          <AnswerCarousel
+            total={altTotal!}
+            current={altCurrent ?? 0}
+            onPrev={onAltPrev}
+            onNext={onAltNext}
+          />
+        )}
       </div>
     </div>
   );

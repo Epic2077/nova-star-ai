@@ -10,8 +10,15 @@ import {
   BreadcrumbSeparator,
 } from "../ui/breadcrumb";
 import { Button } from "../ui/button";
-import { Settings } from "lucide-react";
+import { Download, Settings } from "lucide-react";
 import { Separator } from "../ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 import { useUser } from "@/hooks/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -27,6 +34,48 @@ const ChatHeader = () => {
   const chatId = params?.dataId;
   const [chatTitle, setChatTitle] = useState("");
   const [isChatTitleLoading, setIsChatTitleLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExport = async (format: "markdown" | "pdf") => {
+    if (!chatId || isExporting) return;
+    setIsExporting(true);
+    try {
+      const resp = await fetch("/api/chat/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chatId, format }),
+      });
+
+      if (!resp.ok) {
+        throw new Error("Export failed");
+      }
+
+      if (format === "pdf") {
+        // Open the printable HTML in a new tab
+        const html = await resp.text();
+        const blob = new Blob([html], { type: "text/html" });
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      } else {
+        // Download as .md
+        const text = await resp.text();
+        const blob = new Blob([text], { type: "text/markdown" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${chatTitle || "chat"}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      toast.success(`Exported as ${format === "pdf" ? "PDF" : "Markdown"}`);
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   useEffect(() => {
     const fetchChatTitle = async () => {
@@ -116,7 +165,33 @@ const ChatHeader = () => {
           </BreadcrumbList>
         </Breadcrumb>
       </div>
-      <div className="ml-auto hidden items-center px-4 text-xs text-muted-foreground md:flex">
+      <div className="ml-auto hidden items-center gap-1 px-4 text-xs text-muted-foreground md:flex">
+        {chatId && (
+          <DropdownMenu>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    className="rounded-lg"
+                    disabled={isExporting}
+                  >
+                    <Download className="size-4 text-foreground" />
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Export chat</TooltipContent>
+            </Tooltip>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => handleExport("markdown")}>
+                Export as Markdown
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleExport("pdf")}>
+                Export as PDF
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <Button variant="ghost" className="rounded-lg">
           <Settings className="size-4 text-foreground" />
         </Button>

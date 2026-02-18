@@ -30,6 +30,8 @@ export type ProviderOptions = {
   temperature?: number;
   /** Enable deep-thinking / reasoning mode */
   deepThinking?: boolean;
+  /** AbortSignal to cancel in-flight requests */
+  signal?: AbortSignal;
 };
 
 export type ProviderResult =
@@ -209,6 +211,7 @@ export async function* callProviderStream(
     model,
     temperature = 0.7,
     deepThinking = false,
+    signal,
   } = opts;
 
   const msgArray = messages;
@@ -257,6 +260,7 @@ export async function* callProviderStream(
         stream: true,
         ...bodyExtras,
       }),
+      signal,
     });
 
     if (!resp.ok) {
@@ -299,6 +303,7 @@ export async function* callProviderStream(
       Authorization: `Bearer ${OPENAI_KEY}`,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!resp.ok) {

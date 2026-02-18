@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
       useWebSearch = false,
       useDeepThinking = false,
       attachments = [] as FileAttachment[],
+      skipSaveUser = false, // true during regeneration
     } = await req.json();
 
     if (!content || !chatId) {
@@ -147,37 +148,44 @@ export async function POST(req: NextRequest) {
 
     /**
      * 2️⃣ Save user message (with optional file attachments)
+     *    Skipped during regeneration (skipSaveUser = true).
      */
-    const userMsgMetadata: MessageMetadata | undefined =
-      attachments.length > 0 ? { attachments } : undefined;
+    let insertedUserMsg: Record<string, unknown> | null = null;
 
-    const userMsgType =
-      attachments.length > 0
-        ? attachments.some((a: FileAttachment) =>
-            a.mimeType?.startsWith("image/"),
-          )
-          ? ("image" as const)
-          : ("file" as const)
-        : ("text" as const);
+    if (!skipSaveUser) {
+      const userMsgMetadata: MessageMetadata | undefined =
+        attachments.length > 0 ? { attachments } : undefined;
 
-    const { data: insertedUserMsg, error: insertUserError } = await supabase
-      .from("messages")
-      .insert({
-        chat_id: chatId,
-        role: "user",
-        content,
-        type: userMsgType,
-        metadata: userMsgMetadata ?? null,
-      })
-      .select("id, role, content, type, metadata")
-      .single();
+      const userMsgType =
+        attachments.length > 0
+          ? attachments.some((a: FileAttachment) =>
+              a.mimeType?.startsWith("image/"),
+            )
+            ? ("image" as const)
+            : ("file" as const)
+          : ("text" as const);
 
-    if (insertUserError) {
-      console.error("User insert error:", insertUserError);
-      return NextResponse.json(
-        { error: "Failed to save user message" },
-        { status: 500 },
-      );
+      const { data: savedUserMsg, error: insertUserError } = await supabase
+        .from("messages")
+        .insert({
+          chat_id: chatId,
+          role: "user",
+          content,
+          type: userMsgType,
+          metadata: userMsgMetadata ?? null,
+        })
+        .select("id, role, content, type, metadata")
+        .single();
+
+      if (insertUserError) {
+        console.error("User insert error:", insertUserError);
+        return NextResponse.json(
+          { error: "Failed to save user message" },
+          { status: 500 },
+        );
+      }
+
+      insertedUserMsg = savedUserMsg;
     }
 
     /**
@@ -282,6 +290,10 @@ export async function POST(req: NextRequest) {
      */
     const encoder = new TextEncoder();
 
+    // Abort controller for cancelling upstream provider calls when the
+    // client disconnects (e.g. user clicks Stop).
+    const providerAbort = new AbortController();
+
     const stream = new ReadableStream({
       async start(controller) {
         const sendEvent = (event: string, data: unknown) => {
@@ -300,7 +312,11 @@ export async function POST(req: NextRequest) {
             provider,
             model,
             deepThinking: useDeepThinking,
+            signal: providerAbort.signal,
           })) {
+            // If the client disconnected, stop iterating.
+            if (providerAbort.signal.aborted) break;
+
             if (chunk.type === "thinking") {
               sendEvent("thinking", { text: chunk.text });
             } else if (chunk.type === "content") {
@@ -379,6 +395,10 @@ export async function POST(req: NextRequest) {
         } finally {
           controller.close();
         }
+      },
+      cancel() {
+        // Client disconnected — abort the upstream provider request.
+        providerAbort.abort();
       },
     });
 
