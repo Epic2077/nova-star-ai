@@ -7,7 +7,7 @@ import "katex/dist/katex.min.css";
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="bg-chat-background">
+    <div className="bg-chat-background" suppressHydrationWarning>
       <SidebarProvider>
         <ErrorBoundary
           fallback={

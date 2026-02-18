@@ -18,7 +18,6 @@ import "katex/dist/katex.min.css";
 
 import { useTheme } from "next-themes";
 import { createMarkdownComponents } from "@/components/markdown/markDown";
-import { motion } from "motion/react";
 import {
   Tooltip,
   TooltipContent,
@@ -29,14 +28,22 @@ import { toast } from "sonner";
 import { useRef } from "react";
 import isRTL from "@/lib/rtlDetect";
 import { Vazirmatn } from "next/font/google";
+import type { ToolResult } from "@/types/chat";
+import ThinkingBlock from "./ThinkingBlock";
+import WebSearchBlock from "./WebSearchBlock";
+
 const vazirmatn = Vazirmatn({ subsets: ["arabic", "latin"], display: "swap" });
 
 export default function AssistantMessage({
   content,
-  animate,
+  thinking,
+  toolResults,
+  streaming,
 }: {
   content: string;
-  animate?: boolean;
+  thinking?: string;
+  toolResults?: ToolResult[];
+  streaming?: boolean;
 }) {
   const { theme } = useTheme();
   const rtl = isRTL(content);
@@ -88,43 +95,6 @@ export default function AssistantMessage({
     }
   };
 
-  if (animate) {
-    return (
-      <motion.div
-        dir={rtl ? "rtl" : "ltr"}
-        ref={containerRef}
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.36, ease: "easeOut" }}
-        className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
-        style={rtl ? { fontFamily: vazirmatn.style.fontFamily } : {}}
-      >
-        <ReactMarkdown
-          remarkPlugins={remarkPlugins}
-          rehypePlugins={rehypePlugins}
-          components={createMarkdownComponents({ theme })}
-        >
-          {content}
-        </ReactMarkdown>
-
-        <div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleCopy}
-                aria-label="Copy message"
-                className="rounded-full p-1 hover:bg-muted/60"
-              >
-                <Copy size={18} className="text-foreground" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Copy</TooltipContent>
-          </Tooltip>
-        </div>
-      </motion.div>
-    );
-  }
-
   return (
     <div
       dir={rtl ? "rtl" : "ltr"}
@@ -132,6 +102,10 @@ export default function AssistantMessage({
       ref={containerRef}
       className="relative mb-10 leading-[1.8] text-[1.05rem] max-w-4xl"
     >
+      {thinking && <ThinkingBlock thinking={thinking} streaming={streaming} />}
+      {toolResults && toolResults.length > 0 && (
+        <WebSearchBlock toolResults={toolResults} />
+      )}
       <ReactMarkdown
         remarkPlugins={remarkPlugins}
         rehypePlugins={rehypePlugins}

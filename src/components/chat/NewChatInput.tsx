@@ -6,15 +6,15 @@ import type { Dispatch, SetStateAction } from "react";
 import { PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
-import {
-  shouldUseReferenceLayer,
-  shouldUseInsightLayer,
-} from "@/lib/promptLayerDetection";
 import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Spinner } from "../ui/spinner";
+import isRTL from "@/lib/rtlDetect";
+import ChatToolbar, { type ToolToggles } from "./ChatToolbar";
+import FilePreview from "./message/FilePreview";
+import type { FileAttachment } from "@/types/chat";
 
 interface ChatInputProps {
   userInfo: { user_metadata?: { full_name?: string } } | null;
@@ -27,6 +27,56 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+
+  const [tools, setTools] = React.useState<ToolToggles>({
+    webSearch: false,
+    deepThinking: false,
+  });
+
+  const [pendingFiles, setPendingFiles] = React.useState<FileAttachment[]>([]);
+  const [isUploading, setIsUploading] = React.useState(false);
+
+  const handleToggle = (tool: keyof ToolToggles) => {
+    setTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    const newAttachments: FileAttachment[] = [];
+
+    for (const file of Array.from(files)) {
+      const url = file.type.startsWith("image/")
+        ? URL.createObjectURL(file)
+        : "";
+
+      newAttachments.push({
+        name: file.name,
+        url,
+        mimeType: file.type || "application/octet-stream",
+        size: file.size,
+        ...({ _file: file } as unknown as object),
+      });
+    }
+
+    setPendingFiles((prev) => [...prev, ...newAttachments]);
+    setIsUploading(false);
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setPendingFiles((prev) => {
+      const removed = prev[index];
+      if (removed?.url?.startsWith("blob:")) {
+        URL.revokeObjectURL(removed.url);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  };
 
   useEffect(() => {
     const onPageLoad = () => {
@@ -91,85 +141,86 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
       }),
     );
 
-    // Store optimistic first message so ChatBody shows it instantly on mount
-    // (eliminates the race condition with custom events + navigation)
+    // Upload files BEFORE navigating so we have the final URLs.
+    const attachments = [...pendingFiles];
+    setPendingFiles([]);
+
+    let uploadedAttachments: FileAttachment[] = [];
+    if (attachments.length > 0) {
+      try {
+        const uploadPromises = attachments.map(async (att) => {
+          const fileObj = (att as unknown as { _file?: File })._file;
+          if (!fileObj) return att;
+
+          const formData = new FormData();
+          formData.append("file", fileObj);
+          formData.append("chatId", data.id);
+
+          const uploadResp = await fetch("/api/chat/upload", {
+            method: "POST",
+            body: formData,
+          });
+
+          if (uploadResp.ok) {
+            const uploaded = await uploadResp.json();
+            return {
+              name: uploaded.name,
+              url: uploaded.url,
+              mimeType: uploaded.mimeType,
+              size: uploaded.size,
+            } as FileAttachment;
+          }
+          return att;
+        });
+
+        uploadedAttachments = await Promise.all(uploadPromises);
+      } catch {
+        uploadedAttachments = attachments;
+      }
+    }
+
+    // Store optimistic user bubble for instant first render on ChatBody.
     try {
       sessionStorage.setItem(
         `optimistic-msg-${data.id}`,
-        JSON.stringify({ id: tempId, role: "user", content }),
+        JSON.stringify({
+          id: tempId,
+          role: "user",
+          content,
+          metadata:
+            uploadedAttachments.length > 0
+              ? { attachments: uploadedAttachments }
+              : undefined,
+        }),
       );
     } catch {
-      // sessionStorage may be unavailable — fall through
+      /* sessionStorage unavailable */
     }
 
-    // Navigate immediately - don't wait for AI response
+    // Store the pending submit so ChatBody streams the response itself.
+    try {
+      sessionStorage.setItem(
+        `pending-submit-${data.id}`,
+        JSON.stringify({
+          content,
+          tempId,
+          tools: {
+            webSearch: tools.webSearch,
+            deepThinking: tools.deepThinking,
+          },
+          attachments: uploadedAttachments,
+        }),
+      );
+    } catch {
+      /* sessionStorage unavailable */
+    }
+
     setInput("");
     router.push(`/chat/${data.id}`);
     setIsSubmitting(false);
-
-    // Send the user's first message in the background (fire-and-forget)
-    void fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chatId: data.id,
-        content,
-        useReferenceLayer: shouldUseReferenceLayer(content),
-        useInsightLayer: shouldUseInsightLayer(content),
-      }),
-    })
-      .then(async (resp) => {
-        if (!resp.ok) throw new Error("AI request failed");
-        const json = await resp.json().catch(() => ({}));
-
-        if (json?.reply) {
-          // delay assistantReply slightly so the chat page mounts and begins listening
-          setTimeout(() => {
-            window.dispatchEvent(
-              new CustomEvent("assistantReply", {
-                detail: { chatId: data.id, content: json.reply },
-              }),
-            );
-          }, 350);
-        }
-
-        // server will insert messages and realtime subscription will update the UI
-        window.dispatchEvent(
-          new CustomEvent("messageSent", {
-            detail: { chatId: data.id, tempId },
-          }),
-        );
-      })
-      .catch(() => {
-        // inform ChatBody to replace the thinking indicator with a failed message
-        window.dispatchEvent(
-          new CustomEvent("messageFailed", {
-            detail: { chatId: data.id, tempId },
-          }),
-        );
-      });
-
-    // Generate conversation title separately (first message only)
-    void fetch("/api/chat/title", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chatId: data.id, firstUserMessage: content }),
-    })
-      .then(async (titleResp) => {
-        if (!titleResp.ok) return;
-        const titleJson = await titleResp.json();
-        if (!titleJson?.title) return;
-
-        window.dispatchEvent(
-          new CustomEvent("chatRenamed", {
-            detail: { chatId: data.id, newTitle: titleJson.title },
-          }),
-        );
-      })
-      .catch(() => {
-        /* don't block user flow if title generation fails */
-      });
   };
+
+  const rtl = isRTL(input);
 
   const maxTextareaHeight = 200;
   return (
@@ -190,7 +241,19 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
           className="w-full px-4"
         >
           <div className="mx-auto w-full max-w-2xl rounded-2xl bg-chat-input shadow-xl">
+            {/* Pending file previews */}
+            {pendingFiles.length > 0 && (
+              <div className="px-4 pt-3">
+                <FilePreview
+                  attachments={pendingFiles}
+                  removable
+                  onRemove={handleRemoveFile}
+                />
+              </div>
+            )}
+
             <textarea
+              dir={rtl ? "rtl" : "ltr"}
               value={input}
               rows={1}
               disabled={isSubmitting}
@@ -223,24 +286,42 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
               onChange={(event) => setInput(event.target.value)}
             />
             <div className="flex items-center justify-between px-3 pb-3">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    className="rounded-full w-9 h-9 hover:bg-muted"
-                  >
-                    <PlusIcon />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>Add Files</p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="flex items-center gap-1">
+                {/* File upload button */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                  accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json,.md"
+                />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="rounded-full w-9 h-9 hover:bg-muted"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isUploading || isSubmitting}
+                    >
+                      <PlusIcon />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Add Files</p>
+                  </TooltipContent>
+                </Tooltip>
+
+                {/* Tool toggles */}
+                <ChatToolbar tools={tools} onToggle={handleToggle} />
+              </div>
               <Button
                 variant="secondary"
                 className="h-9 w-9 rounded-full shadow-lg cursor-pointer"
                 onClick={() => void handleNewChat()}
-                disabled={!input.trim() || isSubmitting}
+                disabled={
+                  (!input.trim() && pendingFiles.length === 0) || isSubmitting
+                }
               >
                 {isSubmitting ? (
                   <Spinner className="size-4" />
