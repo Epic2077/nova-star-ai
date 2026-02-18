@@ -3,7 +3,7 @@
 import React, { useEffect } from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
-import { PlusIcon, SendHorizontalIcon } from "lucide-react";
+import { CameraIcon, PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { useRouter } from "next/navigation";
@@ -15,6 +15,7 @@ import isRTL from "@/lib/rtlDetect";
 import ChatToolbar, { type ToolToggles } from "./ChatToolbar";
 import FilePreview from "./message/FilePreview";
 import type { FileAttachment } from "@/types/chat";
+import { useFileAttachments } from "./hooks/useFileAttachments";
 
 interface ChatInputProps {
   userInfo: { user_metadata?: { full_name?: string } } | null;
@@ -27,56 +28,30 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const supabase = React.useMemo(() => createSupabaseBrowserClient(), []);
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [tools, setTools] = React.useState<ToolToggles>({
     webSearch: false,
     deepThinking: false,
   });
 
-  const [pendingFiles, setPendingFiles] = React.useState<FileAttachment[]>([]);
-  const [isUploading, setIsUploading] = React.useState(false);
+  const {
+    pendingFiles,
+    isUploading,
+    fileInputRef,
+    cameraInputRef,
+    handleFileSelect,
+    handleRemoveFile,
+    handlePaste,
+    isDragOver,
+  } = useFileAttachments();
 
   const handleToggle = (tool: keyof ToolToggles) => {
     setTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    const newAttachments: FileAttachment[] = [];
-
-    for (const file of Array.from(files)) {
-      const url = file.type.startsWith("image/")
-        ? URL.createObjectURL(file)
-        : "";
-
-      newAttachments.push({
-        name: file.name,
-        url,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        ...({ _file: file } as unknown as object),
-      });
-    }
-
-    setPendingFiles((prev) => [...prev, ...newAttachments]);
-    setIsUploading(false);
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleRemoveFile = (index: number) => {
-    setPendingFiles((prev) => {
-      const removed = prev[index];
-      if (removed?.url?.startsWith("blob:")) {
-        URL.revokeObjectURL(removed.url);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
-  };
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   useEffect(() => {
     const onPageLoad = () => {
@@ -143,7 +118,6 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
 
     // Upload files BEFORE navigating so we have the final URLs.
     const attachments = [...pendingFiles];
-    setPendingFiles([]);
 
     let uploadedAttachments: FileAttachment[] = [];
     if (attachments.length > 0) {
@@ -225,6 +199,17 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
   const maxTextareaHeight = 200;
   return (
     <div>
+      {/* Full-page drop overlay */}
+      {isDragOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-none">
+          <div className="rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 px-12 py-8 text-center shadow-2xl">
+            <p className="text-lg font-medium text-primary">Drop files here</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Images, PDFs, documents&hellip;
+            </p>
+          </div>
+        </div>
+      )}
       <div className="h-[calc(100vh-150px)] flex flex-col items-center justify-center gap-8 bg-chat-background">
         <motion.h1
           initial={{ opacity: 0, y: 20 }}
@@ -257,6 +242,7 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
               value={input}
               rows={1}
               disabled={isSubmitting}
+              onPaste={handlePaste}
               onKeyDown={(event) => {
                 if (
                   event.key === "Enter" &&
@@ -296,6 +282,15 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
                   onChange={handleFileSelect}
                   accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json,.md"
                 />
+                {/* Camera capture (mobile) */}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -311,6 +306,25 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
                     <p>Add Files</p>
                   </TooltipContent>
                 </Tooltip>
+
+                {/* Camera button (visible on mobile) */}
+                {isMobile && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="rounded-full w-9 h-9 hover:bg-muted"
+                        onClick={() => cameraInputRef.current?.click()}
+                        disabled={isUploading || isSubmitting}
+                      >
+                        <CameraIcon size={18} />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">
+                      <p>Take Photo</p>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
 
                 {/* Tool toggles */}
                 <ChatToolbar tools={tools} onToggle={handleToggle} />

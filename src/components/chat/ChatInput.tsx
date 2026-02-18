@@ -3,13 +3,14 @@
 import React from "react";
 import { motion } from "framer-motion";
 import type { Dispatch, SetStateAction } from "react";
-import { PlusIcon, SendHorizontalIcon } from "lucide-react";
+import { CameraIcon, PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import isRTL from "@/lib/rtlDetect";
 import ChatToolbar, { type ToolToggles } from "./ChatToolbar";
 import FilePreview from "./message/FilePreview";
 import type { FileAttachment } from "@/types/chat";
+import { useFileAttachments } from "./hooks/useFileAttachments";
 
 interface ChatInputProps {
   input: string;
@@ -23,7 +24,6 @@ interface ChatInputProps {
 const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
   const maxTextareaHeight = 200;
   const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
   const rtl = isRTL(input);
 
   const [tools, setTools] = React.useState<ToolToggles>({
@@ -31,78 +31,59 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
     deepThinking: false,
   });
 
-  const [pendingFiles, setPendingFiles] = React.useState<FileAttachment[]>([]);
-  const [isUploading, setIsUploading] = React.useState(false);
+  const {
+    pendingFiles,
+    isUploading,
+    fileInputRef,
+    cameraInputRef,
+    handleFileSelect,
+    handleRemoveFile,
+    handlePaste,
+    isDragOver,
+    takeFiles,
+  } = useFileAttachments();
 
   const handleToggle = (tool: keyof ToolToggles) => {
     setTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    setIsUploading(true);
-    const newAttachments: FileAttachment[] = [];
-
-    for (const file of Array.from(files)) {
-      // Create a local preview URL for images, or a placeholder for other files
-      const url = file.type.startsWith("image/")
-        ? URL.createObjectURL(file)
-        : "";
-
-      newAttachments.push({
-        name: file.name,
-        url,
-        mimeType: file.type || "application/octet-stream",
-        size: file.size,
-        // Store the File object reference for upload on submit
-        ...({ _file: file } as unknown as object),
-      });
-    }
-
-    setPendingFiles((prev) => [...prev, ...newAttachments]);
-    setIsUploading(false);
-
-    // Reset input so the same file can be re-selected
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const handleRemoveFile = (index: number) => {
-    setPendingFiles((prev) => {
-      const removed = prev[index];
-      if (removed?.url?.startsWith("blob:")) {
-        URL.revokeObjectURL(removed.url);
-      }
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
   const handleSubmit = async () => {
     if (input.trim().length === 0 && pendingFiles.length === 0) return;
-    const attachments = [...pendingFiles];
-    setPendingFiles([]);
+    const attachments = takeFiles();
     await onSubmit({ tools, attachments });
   };
 
-  // Reset the textarea height to allow CSS `min-height` to take effect when
-  // the input is cleared (so it returns to the small default size).
+  // Reset the textarea height when input is cleared.
   React.useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     if (input.trim().length === 0) {
-      // remove programmatic height so CSS min-height applies
       el.style.height = "auto";
     }
   }, [input]);
 
+  const isMobile =
+    typeof navigator !== "undefined" &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   return (
     <div className="">
+      {/* Full-page drop overlay */}
+      {isDragOver && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-none">
+          <div className="rounded-2xl border-2 border-dashed border-primary/50 bg-primary/5 px-12 py-8 text-center shadow-2xl">
+            <p className="text-lg font-medium text-primary">Drop files here</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Images, PDFs, documents&hellip;
+            </p>
+          </div>
+        </div>
+      )}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6 }}
-        className="w-full px-4 "
+        className="w-full px-4"
       >
         <div className="mx-auto w-full max-w-4xl rounded-2xl bg-chat-input shadow-xl">
           {/* Pending file previews */}
@@ -121,6 +102,7 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
             ref={textareaRef}
             value={input}
             rows={1}
+            onPaste={handlePaste}
             onKeyDown={(event) => {
               if (
                 event.key === "Enter" &&
@@ -160,6 +142,15 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
                 onChange={handleFileSelect}
                 accept="image/*,.pdf,.doc,.docx,.txt,.csv,.json,.md"
               />
+              {/* Camera capture (mobile) */}
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -175,6 +166,25 @@ const ChatInput = ({ input, setInput, onSubmit }: ChatInputProps) => {
                   <p>Add Files</p>
                 </TooltipContent>
               </Tooltip>
+
+              {/* Camera button (visible on mobile) */}
+              {isMobile && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="rounded-full w-9 h-9 hover:bg-muted"
+                      onClick={() => cameraInputRef.current?.click()}
+                      disabled={isUploading}
+                    >
+                      <CameraIcon size={18} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>Take Photo</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
 
               {/* Tool toggles */}
               <ChatToolbar tools={tools} onToggle={handleToggle} />

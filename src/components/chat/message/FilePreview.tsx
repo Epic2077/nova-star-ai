@@ -60,10 +60,10 @@ export default function FilePreview({
             {removable && onRemove && (
               <button
                 onClick={() => onRemove(i)}
-                className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 shadow-md cursor-pointer hover:scale-110 transition-transform z-10"
                 aria-label={`Remove ${file.name}`}
               >
-                <X size={12} />
+                <X size={14} />
               </button>
             )}
 
