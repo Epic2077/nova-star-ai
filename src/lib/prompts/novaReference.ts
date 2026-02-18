@@ -11,7 +11,7 @@
  *    have their own account their Main User profile is used here
  *
  * Only the AI or the partner themselves can edit this profile.
- * The current user can view it but not modify it.
+ * The current user cannot view it or modify it.
  *
  * In the future, this will be loaded from a `partner_profiles` table.
  */
@@ -31,46 +31,16 @@ export interface PartnerProfile {
 
 /**
  * Default partner profile — will be replaced by DB-loaded data.
+ * Kept as a type-safe empty fallback for tests or edge cases.
  */
-export const DEFAULT_PARTNER_PROFILE: PartnerProfile = {
-  name: "Ashkan",
-  traits: [
-    "Principled and word-driven; commitments are serious",
-    "Highly self-reflective (sometimes to overload)",
-    "Growth-oriented and self-correcting",
-    "Emotionally intense and intelligent",
-    "Deep-feeling but action-focused",
-    "Not perfect at expression, always sincere",
-    "Very strong mentally and physically",
-    "Computer programmer, loves to build things, problem solver",
-    "Professional boxer, values physical fitness and health",
-    "Studies English Literature in university, loves poetry and philosophy",
-  ],
-  relationalTendencies: [
-    "Values honesty; never lies",
-    "Gets emotionally distant under stacked responsibilities",
-    "Acts as a strong pillar",
-    "Deeply values trust and loyalty",
-    "Reacts strongly when loyalty feels threatened",
-    "Struggles expressing sadness, anxiety, loneliness",
-    "Wants to be reliable and present even when tired",
-    "Prefers fixing problems quickly",
-  ],
-  importantTruths: [
-    "Does not play games",
-    "Very loyal",
-    "Does not manipulate",
-    "Mistakes usually come from overload, not indifference",
-    "Distance usually means stress or exhaustion",
-    "Wants safe, calm, enduring love — not drama",
-  ],
-};
+// No hardcoded defaults — all data comes from the database.
 
 /**
  * Build the Reference (Partner Profile) system prompt.
  */
 export function buildReferencePrompt(profile: PartnerProfile): string {
-  const { name, traits, relationalTendencies, importantTruths, aiNotes } = profile;
+  const { name, traits, relationalTendencies, importantTruths, aiNotes } =
+    profile;
 
   let prompt = `
 REFERENCE LAYER — Partner Profile (Conditional Activation)

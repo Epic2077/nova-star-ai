@@ -20,13 +20,7 @@ export interface RelationshipConfig {
   partnerName: string;
 }
 
-/**
- * Default config — will be replaced by DB-loaded data.
- */
-export const DEFAULT_RELATIONSHIP_CONFIG: RelationshipConfig = {
-  creatorName: "Ashkan",
-  partnerName: "Shadi",
-};
+// No hardcoded defaults — all data comes from the database.
 
 /**
  * Build the Relationship Layer system prompt.

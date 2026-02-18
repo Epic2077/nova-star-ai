@@ -6,11 +6,11 @@ Work through each table in order. Check off when done.
 
 ## Migration Order
 
-1. [ ] `user_profiles`
-2. [ ] `partnerships`
-3. [ ] `partner_profiles`
-4. [ ] `shared_memories`
-5. [ ] `shared_insights`
+1. [x] `user_profiles`
+2. [x] `partnerships`
+3. [x] `partner_profiles`
+4. [x] `shared_memories`
+5. [x] `shared_insights`
 6. [ ] `detection_config` (optional)
 
 ---
@@ -87,6 +87,7 @@ With: query `user_profiles` by `user.id`, pass full `UserProfile` to `buildMainU
 | `user_b`      | UUID          | yes      | null                | FK → `auth.users.id` — filled when partner joins |
 | `invite_code` | text (unique) | no       | —                   | The "shared code" one partner generates          |
 | `status`      | text          | no       | `'pending'`         | `'pending'` / `'active'` / `'dissolved'`         |
+| `ended_at`    | timestamptz   | yes      | `now()`             | keep historical data                             |
 | `created_at`  | timestamptz   | no       | `now()`             |                                                  |
 
 ### How It Works
@@ -134,6 +135,7 @@ Used when the partner does NOT have an account yet, or hasn't linked. The AI bui
 - **Partnership active** (both linked) → load partner's `user_profiles` row as Reference instead
 - **Partner has no account** → use this table (AI-built profile)
 - **Partner links account** → `source` flips to `'partner_account'`, data sourced from `user_profiles`
+- **When Partnership becomes active** → Stop querying `partner_profiles`, Archive that row, Always derive partner from `user_profiles`
 
 ### RLS Policies
 
@@ -167,17 +169,18 @@ Cross-chat memory visible to both partners. AI-only editable.
 
 ### Columns
 
-| Column           | Type        | Nullable | Default             | Notes                                                                                                                    |
-| ---------------- | ----------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `id`             | UUID (PK)   | no       | `gen_random_uuid()` |                                                                                                                          |
-| `partnership_id` | UUID        | no       | —                   | FK → `partnerships.id`                                                                                                   |
-| `category`       | text        | no       | `'general'`         | `'preference'` / `'emotional_need'` / `'important_date'` / `'gift_idea'` / `'growth_moment'` / `'pattern'` / `'general'` |
-| `about_user`     | UUID        | yes      | null                | FK → `auth.users.id` — null means about the relationship                                                                 |
-| `content`        | text        | no       | —                   | The actual memory                                                                                                        |
-| `confidence`     | float       | no       | `1.0`               | 0–1, how confident the AI is                                                                                             |
-| `is_active`      | boolean     | no       | `true`              | Soft delete for outdated memories                                                                                        |
-| `created_at`     | timestamptz | no       | `now()`             |                                                                                                                          |
-| `updated_at`     | timestamptz | no       | `now()`             |                                                                                                                          |
+| Column              | Type        | Nullable | Default             | Notes                                                                                                                    |
+| ------------------- | ----------- | -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `id`                | UUID (PK)   | no       | `gen_random_uuid()` |                                                                                                                          |
+| `partnership_id`    | UUID        | no       | —                   | FK → `partnerships.id`                                                                                                   |
+| `category`          | text        | no       | `'general'`         | `'preference'` / `'emotional_need'` / `'important_date'` / `'gift_idea'` / `'growth_moment'` / `'pattern'` / `'general'` |
+| `about_user`        | UUID        | yes      | null                | FK → `auth.users.id` — null means about the relationship                                                                 |
+| `content`           | text        | no       | —                   | should be atomic memory                                                                                                  |
+| `confidence`        | float       | no       | `1.0`               | 0–1, how confident the AI is                                                                                             |
+| `is_active`         | boolean     | no       | `true`              | Soft delete for outdated memories                                                                                        |
+| `source_message_id` | text        | yes      | `true`              | Where did this memory come from                                                                                          |
+| `created_at`        | timestamptz | no       | `now()`             |                                                                                                                          |
+| `updated_at`        | timestamptz | no       | `now()`             |                                                                                                                          |
 
 ### RLS Policies
 
@@ -210,6 +213,7 @@ AI-generated relationship insights. Future dashboard.
 | `about_user`     | UUID        | yes      | null                | FK → `auth.users.id` — which partner this is about                                                                                  |
 | `title`          | text        | no       | —                   | Short label for dashboard                                                                                                           |
 | `content`        | text        | no       | —                   | The insight itself                                                                                                                  |
+| `confidence`     | float       | no       | —                   |                                                                                                                                     |
 | `is_active`      | boolean     | no       | `true`              | Soft delete                                                                                                                         |
 | `created_at`     | timestamptz | no       | `now()`             |                                                                                                                                     |
 | `updated_at`     | timestamptz | no       | `now()`             |                                                                                                                                     |
@@ -225,7 +229,7 @@ Query `shared_insights` for active partnership, inject alongside `NOVA_INSIGHT_L
 
 ---
 
-## Table 6: `detection_config` (Optional)
+## Table 6: `detection_config` (Optional) "hard code for V1 is enough"
 
 **Powers**: Dynamic layer detection (`promptLayerDetection.ts`)
 

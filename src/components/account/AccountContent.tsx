@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import ProfileSection from "./ProfileSection";
 import AppearanceSection from "./AppearanceSection";
 import SecuritySection from "./SecuritySection";
+import PartnershipSection from "./PartnershipSection";
 import { Skeleton } from "@/components/ui/skeleton";
 
 function AccountSections() {
@@ -16,6 +17,8 @@ function AccountSections() {
       return <AppearanceSection />;
     case "security":
       return <SecuritySection />;
+    case "partnership":
+      return <PartnershipSection />;
     case "profile":
     default:
       return <ProfileSection />;

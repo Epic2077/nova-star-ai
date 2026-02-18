@@ -44,20 +44,13 @@ function score(input: string, keywords: WeightedKeyword[]): number {
 const RELATIONSHIP_THRESHOLD = 2;
 
 export interface RelationshipDetectionConfig {
-  /** The partner's name(s) — loaded from DB in the future */
+  /** The partner's name(s) — loaded from partner profile */
   partnerNames?: string[];
 }
 
-/**
- * Default config — will be replaced by per-user DB config later.
- */
-const DEFAULT_CONFIG: RelationshipDetectionConfig = {
-  partnerNames: ["ashkan", "اشکان", "اشکانم", "ashkanam"],
-};
-
 export function shouldUseRelationshipLayer(
   input: string,
-  config: RelationshipDetectionConfig = DEFAULT_CONFIG,
+  config: RelationshipDetectionConfig = {},
 ): boolean {
   const lowerInput = input.toLowerCase().trim();
 
