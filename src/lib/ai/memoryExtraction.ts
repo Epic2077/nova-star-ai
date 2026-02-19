@@ -12,6 +12,7 @@
 import { callProvider, type ChatMessage } from "@/lib/ai/provider";
 import { insertSharedMemory } from "@/lib/supabase/sharedMemory";
 import { insertSharedInsight } from "@/lib/supabase/sharedInsight";
+import { insertPersonalMemory } from "@/lib/supabase/personalMemory";
 import { upsertAIPartnerProfile } from "@/lib/supabase/partnerProfile";
 import type { PartnershipRow } from "@/types/partnership";
 import type { PersonalitySummary } from "@/types/userProfile";
@@ -43,6 +44,13 @@ interface ExtractionResult {
     importantTruths?: string[];
     aiNotes?: string;
   };
+  /** Personal memories — about this user only, no partnership required */
+  personalMemories?: Array<{
+    category: string;
+    content: string;
+    confidence?: number;
+  }>;
+  /** Shared memories — about the relationship, requires active partnership */
   memories?: Array<{
     category: string;
     content: string;
@@ -72,13 +80,19 @@ Return a JSON object with these optional fields (omit any that have nothing new)
 
 2. "partnerProfile" — if the user mentioned their partner by name and revealed new traits, relational tendencies, or important truths about them. Must include "name".
 
-3. "memories" — atomic, specific facts worth remembering across conversations:
+3. "personalMemories" — facts about the CURRENT USER that should be remembered across all conversations, even without a partner:
+   - category: "preference" | "emotional_need" | "important_date" | "growth_moment" | "pattern" | "goal" | "general"
+   - content: one clear sentence about the user
+   - confidence: 0-1 how sure you are
+   Use this for individual preferences, goals, personal milestones, habits, etc.
+
+4. "memories" — shared/relationship memories (only when the user is talking about their RELATIONSHIP or PARTNER):
    - category: "preference" | "emotional_need" | "important_date" | "gift_idea" | "growth_moment" | "pattern" | "general"
    - content: one clear sentence
    - aboutUser: "current" | "partner" | "relationship"
    - confidence: 0-1 how sure you are
 
-4. "insights" — high-level relationship observations (only when genuinely insightful):
+5. "insights" — high-level relationship observations (only when genuinely insightful):
    - category: "emotional_need" | "communication" | "appreciation" | "conflict_style" | "growth_area" | "strength" | "gift_relevant"
    - title: short label
    - content: the insight
@@ -89,6 +103,8 @@ Rules:
 - Be selective — quality over quantity
 - Only extract what is clearly stated or strongly implied
 - Do NOT fabricate or assume
+- Always populate "personalMemories" when you learn something about the user as an individual
+- Only populate "memories" (shared) when content is about the relationship or partner
 - If nothing new was learned, return an empty object: {}
 - Return ONLY valid JSON, no markdown fences, no explanation
 `;
@@ -168,6 +184,7 @@ export async function runMemoryExtraction(
     if (
       !extraction.userProfile &&
       !extraction.partnerProfile &&
+      !extraction.personalMemories?.length &&
       !extraction.memories?.length &&
       !extraction.insights?.length
     ) {
@@ -193,7 +210,28 @@ export async function runMemoryExtraction(
       );
     }
 
-    // ── 3. Insert shared memories ──
+    // ── 3. Insert personal memories (always — no partnership required) ──
+    if (extraction.personalMemories?.length) {
+      for (const mem of extraction.personalMemories) {
+        writes.push(
+          insertPersonalMemory(supabase, {
+            userId,
+            category: mem.category as
+              | "preference"
+              | "emotional_need"
+              | "important_date"
+              | "growth_moment"
+              | "pattern"
+              | "goal"
+              | "general",
+            content: mem.content,
+            confidence: mem.confidence ?? 1.0,
+          }),
+        );
+      }
+    }
+
+    // ── 4. Insert shared memories (only with active partnership) ──
     if (extraction.memories?.length && partnership?.status === "active") {
       const partnerId =
         partnership.user_a === userId ? partnership.user_b : partnership.user_a;
@@ -225,7 +263,7 @@ export async function runMemoryExtraction(
       }
     }
 
-    // ── 4. Insert shared insights ──
+    // ── 5. Insert shared insights ──
     if (extraction.insights?.length && partnership?.status === "active") {
       const partnerId =
         partnership.user_a === userId ? partnership.user_b : partnership.user_a;
@@ -264,7 +302,8 @@ export async function runMemoryExtraction(
       `Memory extraction completed for chat ${chatId}: ` +
         `${extraction.userProfile ? "profile " : ""}` +
         `${extraction.partnerProfile ? "partner " : ""}` +
-        `${extraction.memories?.length ?? 0} memories, ` +
+        `${extraction.personalMemories?.length ?? 0} personal, ` +
+        `${extraction.memories?.length ?? 0} shared, ` +
         `${extraction.insights?.length ?? 0} insights`,
     );
   } catch (err) {

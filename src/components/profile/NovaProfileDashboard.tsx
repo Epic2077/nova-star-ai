@@ -4,14 +4,16 @@ import { useState, useEffect, useCallback } from "react";
 import { useUser } from "@/hooks/useUser";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { User, Heart, BookOpen, Lightbulb } from "lucide-react";
+import { User, Heart, BookOpen, Brain, Lightbulb } from "lucide-react";
 import UserAIProfileTab from "./UserAIProfileTab";
 import PartnerProfileTab from "./PartnerProfileTab";
+import PersonalMemoriesTab from "./PersonalMemoriesTab";
 import SharedMemoriesTab from "./SharedMemoriesTab";
 import SharedInsightsTab from "./SharedInsightsTab";
 import type { UserProfileRow } from "@/types/userProfile";
 import type { PartnerProfileRow } from "@/types/partnerProfile";
 import type { PartnershipRow } from "@/types/partnership";
+import type { PersonalMemoryRow } from "@/types/personalMemory";
 import type { SharedMemoryRow } from "@/types/sharedMemory";
 import type { SharedInsightRow } from "@/types/sharedInsight";
 
@@ -20,6 +22,7 @@ interface NovaProfileData {
   partnership: PartnershipRow | null;
   partnerProfile: PartnerProfileRow | null;
   partnerName: string | null;
+  personalMemories: PersonalMemoryRow[];
   memories: SharedMemoryRow[];
   insights: SharedInsightRow[];
 }
@@ -79,9 +82,18 @@ export default function NovaProfileDashboard() {
           <Heart className="size-4" />
           Partner
         </TabsTrigger>
+        <TabsTrigger value="personal-memories" className="gap-1.5">
+          <Brain className="size-4" />
+          My Memories
+          {(data?.personalMemories?.length ?? 0) > 0 && (
+            <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
+              {data!.personalMemories.length}
+            </span>
+          )}
+        </TabsTrigger>
         <TabsTrigger value="memories" className="gap-1.5">
           <BookOpen className="size-4" />
-          Memories
+          Shared
           {(data?.memories?.length ?? 0) > 0 && (
             <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] leading-none text-muted-foreground">
               {data!.memories.length}
@@ -112,6 +124,10 @@ export default function NovaProfileDashboard() {
           partnerProfile={data?.partnerProfile ?? null}
           partnerName={data?.partnerName ?? null}
         />
+      </TabsContent>
+
+      <TabsContent value="personal-memories" className="mt-6">
+        <PersonalMemoriesTab memories={data?.personalMemories ?? []} />
       </TabsContent>
 
       <TabsContent value="memories" className="mt-6">

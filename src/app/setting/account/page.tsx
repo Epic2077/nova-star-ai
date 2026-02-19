@@ -5,6 +5,11 @@ export const metadata: Metadata = {
   title: "Account",
 };
 
-export default function AccountPage() {
-  return <AccountContent />;
+export default async function AccountPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ section?: string }>;
+}) {
+  const { section = "profile" } = await searchParams;
+  return <AccountContent section={section} />;
 }

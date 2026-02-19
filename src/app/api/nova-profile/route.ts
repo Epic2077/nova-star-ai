@@ -27,8 +27,8 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Fetch user AI profile + active partnership in parallel
-  const [profileRes, partnershipRes] = await Promise.all([
+  // Fetch user AI profile + active partnership + personal memories in parallel
+  const [profileRes, partnershipRes, personalMemoriesRes] = await Promise.all([
     serviceClient
       .from("user_profiles")
       .select("*")
@@ -40,10 +40,17 @@ export async function GET(req: NextRequest) {
       .or(`user_a.eq.${user.id},user_b.eq.${user.id}`)
       .eq("status", "active")
       .maybeSingle(),
+    serviceClient
+      .from("personal_memories")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
   ]);
 
   const userProfile = profileRes.data ?? null;
   const partnership = partnershipRes.data ?? null;
+  const personalMemories = personalMemoriesRes.data ?? [];
 
   let partnerProfile = null;
   let memories: unknown[] = [];
@@ -109,6 +116,7 @@ export async function GET(req: NextRequest) {
     partnership,
     partnerProfile,
     partnerName,
+    personalMemories,
     memories,
     insights,
   });

@@ -68,11 +68,15 @@ export default function CreatorLayoutClient({
     ? "chats"
     : pathname.startsWith("/creator/ai-profile")
       ? "ai-profile"
-      : pathname.startsWith("/creator/memories")
-        ? "memories"
-        : pathname.startsWith("/creator/insights")
-          ? "insights"
-          : "user";
+      : pathname.startsWith("/creator/personal-memories")
+        ? "personal-memories"
+        : pathname.startsWith("/creator/memories")
+          ? "memories"
+          : pathname.startsWith("/creator/insights")
+            ? "insights"
+            : pathname.startsWith("/creator/usage")
+              ? "usage"
+              : "user";
 
   const handleLogout = async () => {
     try {
@@ -98,8 +102,10 @@ export default function CreatorLayoutClient({
                     user: "/creator/user",
                     chats: "/creator/chats",
                     "ai-profile": "/creator/ai-profile",
+                    "personal-memories": "/creator/personal-memories",
                     memories: "/creator/memories",
                     insights: "/creator/insights",
+                    usage: "/creator/usage",
                   };
                   router.push(routes[value] ?? "/creator/user");
                 }}
@@ -108,8 +114,10 @@ export default function CreatorLayoutClient({
                   <TabsTrigger value="user">User</TabsTrigger>
                   <TabsTrigger value="chats">Chats</TabsTrigger>
                   <TabsTrigger value="ai-profile">AI Profile</TabsTrigger>
-                  <TabsTrigger value="memories">Memories</TabsTrigger>
+                  <TabsTrigger value="personal-memories">Personal</TabsTrigger>
+                  <TabsTrigger value="memories">Shared</TabsTrigger>
                   <TabsTrigger value="insights">Insights</TabsTrigger>
+                  <TabsTrigger value="usage">Usage</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button variant="outline" onClick={handleLogout}>

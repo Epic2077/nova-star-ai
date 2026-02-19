@@ -13,6 +13,6 @@
 
 ## Polish
 
-- [ ] Prompt caching — reduce cost/latency for repeated system prompts
-- [ ] Rate limiting & usage tracking — token usage per user, display in settings
+- [x] Prompt caching — reduce cost/latency for repeated system prompts
+- [x] Rate limiting & usage tracking — token usage per user, display in settings
 - [ ] Voice input/output — Whisper STT, TTS for responses

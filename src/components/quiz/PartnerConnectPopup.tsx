@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Heart, ArrowRight, X } from "lucide-react";
+import { useUser } from "@/hooks/useUser";
 
 /**
  * A small popup that asks the user if they want to connect
@@ -18,28 +19,53 @@ import { Heart, ArrowRight, X } from "lucide-react";
  */
 export default function PartnerConnectPopup() {
   const router = useRouter();
+  const { user } = useUser();
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    // If the user already dismissed the popup before, never show again
+    if (localStorage.getItem("nova_partner_dismissed")) return;
+
     // Check sessionStorage flag set by quiz completion or skip
     const shouldShow = sessionStorage.getItem("nova_show_partner_popup");
-    if (shouldShow === "1") {
+    if (shouldShow !== "1") return;
+
+    // Check if user already has an active partnership — no need to show
+    const checkPartnership = async () => {
+      try {
+        const res = await fetch("/api/nova-profile");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.partnership) {
+          // Already connected — mark as dismissed so we never check again
+          localStorage.setItem("nova_partner_dismissed", "1");
+          sessionStorage.removeItem("nova_show_partner_popup");
+          return;
+        }
+      } catch {
+        // silently fail — still show popup
+      }
+
       // Small delay so it doesn't clash with page transition
       const timer = setTimeout(() => {
         setOpen(true);
         sessionStorage.removeItem("nova_show_partner_popup");
       }, 800);
       return () => clearTimeout(timer);
-    }
-  }, []);
+    };
+
+    checkPartnership();
+  }, [user]);
 
   const handleConnect = () => {
     setOpen(false);
+    localStorage.setItem("nova_partner_dismissed", "1");
     router.push("/setting/account?section=partnership");
   };
 
   const handleSkip = () => {
     setOpen(false);
+    localStorage.setItem("nova_partner_dismissed", "1");
   };
 
   if (!open) return null;
