@@ -50,7 +50,7 @@ const Philosophy = () => {
                 <h3 className="font-semibold text-foreground mb-2">
                   {item.title}
                 </h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+                <p className="text-sm text-foreground leading-relaxed">
                   {item.text}
                 </p>
               </motion.div>

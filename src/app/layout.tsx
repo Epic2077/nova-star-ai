@@ -85,7 +85,19 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          themes={[
+            "light",
+            "dark",
+            "system",
+            "ocean",
+            "forest",
+            "custom-theme",
+          ]}
+        >
           <UserProvider>
             <ProfileProvider>
               {children}
