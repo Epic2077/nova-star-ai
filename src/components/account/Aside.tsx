@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
-import { User, Palette, Shield, Heart } from "lucide-react";
+import { User, Palette, Shield, Heart, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -24,6 +24,12 @@ const navItems = [
     label: "Security",
     icon: Shield,
     description: "Password & account safety",
+  },
+  {
+    key: "usage",
+    label: "Usage",
+    icon: Activity,
+    description: "Token usage & limits",
   },
   {
     key: "partnership",

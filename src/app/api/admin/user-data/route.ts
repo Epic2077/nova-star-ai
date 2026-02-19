@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
+import { fetchUsageStats } from "@/lib/ai/tokenUsage";
 
 type ChatRow = {
   id: string;
@@ -152,22 +153,30 @@ export async function GET(request: NextRequest) {
     }));
 
     // ── Nova AI data (partnership, partner profile, memories, insights) ──
-    const [userProfileRes, partnershipRes] = await Promise.all([
-      service
-        .from("user_profiles")
-        .select("*")
-        .eq("id", targetUser.id)
-        .maybeSingle(),
-      service
-        .from("partnerships")
-        .select("*")
-        .or(`user_a.eq.${targetUser.id},user_b.eq.${targetUser.id}`)
-        .eq("status", "active")
-        .maybeSingle(),
-    ]);
+    const [userProfileRes, partnershipRes, personalMemoriesRes] =
+      await Promise.all([
+        service
+          .from("user_profiles")
+          .select("*")
+          .eq("id", targetUser.id)
+          .maybeSingle(),
+        service
+          .from("partnerships")
+          .select("*")
+          .or(`user_a.eq.${targetUser.id},user_b.eq.${targetUser.id}`)
+          .eq("status", "active")
+          .maybeSingle(),
+        service
+          .from("personal_memories")
+          .select("*")
+          .eq("user_id", targetUser.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false }),
+      ]);
 
     const userProfile = userProfileRes.data ?? null;
     const partnership = partnershipRes.data ?? null;
+    const personalMemories = personalMemoriesRes.data ?? [];
 
     let partnerProfile = null;
     let novaMemories: unknown[] = [];
@@ -224,6 +233,9 @@ export async function GET(request: NextRequest) {
       partnerProfile = aiPartner ?? null;
     }
 
+    // ── Token usage stats ──
+    const usageStats = await fetchUsageStats(service, targetUser.id);
+
     return NextResponse.json({
       user: {
         id: targetUser.id,
@@ -242,9 +254,11 @@ export async function GET(request: NextRequest) {
         partnership,
         partnerProfile,
         partnerName,
+        personalMemories,
         memories: novaMemories,
         insights: novaInsights,
       },
+      usage: usageStats,
     });
   } catch (error) {
     console.error("Admin user-data API error:", error);

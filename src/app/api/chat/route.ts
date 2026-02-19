@@ -16,6 +16,10 @@ import {
   fetchSharedInsights,
   formatSharedInsights,
 } from "@/lib/supabase/sharedInsight";
+import {
+  fetchPersonalMemories,
+  formatPersonalMemories,
+} from "@/lib/supabase/personalMemory";
 import { buildMainUserPrompt } from "@/lib/prompts/novaMainUser";
 import {
   shouldUseRelationshipLayer,
@@ -31,6 +35,12 @@ import {
 } from "@/lib/ai/webSearch";
 import { runMemorySummarization } from "@/lib/ai/memorySummarization";
 import { runMemoryExtraction } from "@/lib/ai/memoryExtraction";
+import { getCachedPrompt } from "@/lib/ai/promptCache";
+import {
+  checkRateLimit,
+  recordTokenUsage,
+  estimateTokens,
+} from "@/lib/ai/tokenUsage";
 import type { FileAttachment, ToolResult, MessageMetadata } from "@/types/chat";
 
 /**
@@ -61,6 +71,32 @@ export async function POST(req: NextRequest) {
     }
 
     const supabase = serviceClient;
+
+    /**
+     * 0.1️⃣ Rate-limit check (24h rolling window)
+     *     Admin and creator roles are exempt.
+     */
+    const { data: callerProfile } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const rateLimit = await checkRateLimit(
+      supabase,
+      user.id,
+      callerProfile?.role,
+    );
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        {
+          error: "Daily token limit reached. Please try again tomorrow.",
+          tokensUsedToday: rateLimit.tokensUsedToday,
+          limit: rateLimit.limit,
+        },
+        { status: 429 },
+      );
+    }
 
     const {
       content,
@@ -205,39 +241,69 @@ export async function POST(req: NextRequest) {
     // Load cross-chat shared memories and insights if partnership exists
     const hasActivePartnership = activePartnership?.status === "active";
 
-    const [sharedMemories, sharedInsights] = hasActivePartnership
-      ? await Promise.all([
-          useMemoryLayer
-            ? fetchSharedMemories(supabase, activePartnership.id)
-            : [],
-          useInsightLayer
-            ? fetchSharedInsights(supabase, activePartnership.id)
-            : [],
-        ])
-      : [[], []];
+    const [personalMemories, sharedMemories, sharedInsights] =
+      await Promise.all([
+        useMemoryLayer ? fetchPersonalMemories(supabase, user.id) : [],
+        hasActivePartnership && useMemoryLayer
+          ? fetchSharedMemories(supabase, activePartnership.id)
+          : [],
+        hasActivePartnership && useInsightLayer
+          ? fetchSharedInsights(supabase, activePartnership.id)
+          : [],
+      ]);
 
+    const personalMemoryContext = formatPersonalMemories(personalMemories);
     const sharedMemoryContext = formatSharedMemories(sharedMemories);
     const sharedInsightContext = formatSharedInsights(sharedInsights);
 
     const userProfile = toUserProfile(userProfileRow);
 
-    const layeredSystemPrompt = [
-      NOVA_CORE_PROMPT,
-      buildMainUserPrompt(userProfile),
-      useMemoryLayer ? NOVA_MEMORY_LAYER_PROMPT : null,
-      useInsightLayer ? NOVA_INSIGHT_LAYER_PROMPT : null,
-      useRelationshipLayer && partnerProfile
-        ? buildRelationshipPrompt({
-            creatorName: userProfile.name,
-            partnerName: partnerProfile.name,
-          })
-        : null,
-      useRelationshipLayer && partnerProfile
-        ? buildReferencePrompt(partnerProfile)
-        : null,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    /**
+     * Build the layered system prompt — cached by content-hash so
+     * identical prompts across consecutive requests are not rebuilt.
+     */
+    const cacheKeyParts = [
+      user.id,
+      useMemoryLayer,
+      useInsightLayer,
+      useRelationshipLayer,
+      partnerProfile?.name ?? null,
+      userProfile.name,
+      userProfile.tone,
+      userProfile.communicationStyle,
+      userProfile.emotionalPatterns,
+      userProfile.interests,
+      JSON.stringify(userProfile.memorySummary ?? null),
+      chatData?.memory_summary ?? "",
+      personalMemoryContext,
+      sharedMemoryContext,
+      sharedInsightContext,
+    ];
+
+    const { prompt: layeredSystemPrompt, cacheHit: promptCacheHit } =
+      getCachedPrompt(cacheKeyParts, () =>
+        [
+          NOVA_CORE_PROMPT,
+          buildMainUserPrompt(userProfile),
+          useMemoryLayer ? NOVA_MEMORY_LAYER_PROMPT : null,
+          useInsightLayer ? NOVA_INSIGHT_LAYER_PROMPT : null,
+          useRelationshipLayer && partnerProfile
+            ? buildRelationshipPrompt({
+                creatorName: userProfile.name,
+                partnerName: partnerProfile.name,
+              })
+            : null,
+          useRelationshipLayer && partnerProfile
+            ? buildReferencePrompt(partnerProfile)
+            : null,
+        ]
+          .filter(Boolean)
+          .join("\n\n"),
+      );
+
+    if (promptCacheHit) {
+      console.log("[prompt-cache] HIT for user", user.id);
+    }
 
     /**
      * 3.5️⃣ Web Search (if enabled)
@@ -272,6 +338,7 @@ export async function POST(req: NextRequest) {
     const systemMsg =
       layeredSystemPrompt +
       memoryContext +
+      personalMemoryContext +
       sharedMemoryContext +
       sharedInsightContext +
       webSearchContext +
@@ -306,6 +373,13 @@ export async function POST(req: NextRequest) {
 
         let fullText = "";
         let fullThinking = "";
+        let streamTokenUsage:
+          | {
+              promptTokens: number;
+              completionTokens: number;
+              totalTokens: number;
+            }
+          | undefined;
 
         try {
           for await (const chunk of callProviderStream(messages, {
@@ -324,6 +398,7 @@ export async function POST(req: NextRequest) {
             } else if (chunk.type === "done") {
               fullText = chunk.fullText;
               fullThinking = chunk.fullThinking;
+              streamTokenUsage = chunk.tokenUsage;
             } else if (chunk.type === "error") {
               sendEvent("error", { error: chunk.error });
               controller.close();
@@ -369,6 +444,22 @@ export async function POST(req: NextRequest) {
             toolResults: toolResults.length > 0 ? toolResults : null,
             userMessage: insertedUserMsg ?? null,
             assistantMessage: insertedAssistantMsg ?? null,
+          });
+
+          // Fire-and-forget: record token usage
+          const resolvedModel =
+            model ??
+            (provider === "deepseek" ? "deepseek-chat" : "gpt-4.1-mini");
+          const tokensUsed =
+            streamTokenUsage?.totalTokens ??
+            estimateTokens(systemMsg + content + fullText);
+
+          void recordTokenUsage(supabase, {
+            userId: user.id,
+            tokensUsed,
+            provider,
+            model: resolvedModel,
+            endpoint: "chat",
           });
 
           // Fire-and-forget memory summarization

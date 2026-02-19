@@ -7,6 +7,8 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
+import { ChevronLeft } from "lucide-react";
+import Link from "next/link";
 
 export default function ProfileLayout({
   children,
@@ -16,6 +18,10 @@ export default function ProfileLayout({
   return (
     <section className="mx-auto w-full max-w-5xl px-4 py-10 sm:px-6 lg:px-8 lg:py-14">
       {/* Breadcrumb */}
+      <Link href="/chat" className="flex gap-4 items-center text-lg mb-5">
+        <ChevronLeft />
+        Back
+      </Link>
       <Breadcrumb>
         <BreadcrumbList>
           <BreadcrumbItem>

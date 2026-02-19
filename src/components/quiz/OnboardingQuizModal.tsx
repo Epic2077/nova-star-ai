@@ -27,6 +27,10 @@ export default function OnboardingQuizModal() {
   const checkProfile = useCallback(async () => {
     if (!user) return;
     try {
+      // If the user already dismissed the quiz, don't show again
+      if (localStorage.getItem("nova_quiz_dismissed")) {
+        return;
+      }
       const res = await fetch("/api/nova-profile");
       if (!res.ok) return;
       const data = await res.json();
@@ -53,6 +57,8 @@ export default function OnboardingQuizModal() {
 
   const handleSkip = () => {
     setOpen(false);
+    // Remember that the user dismissed the quiz so it won't show again
+    localStorage.setItem("nova_quiz_dismissed", "1");
     // Show partner popup after skipping
     sessionStorage.setItem("nova_show_partner_popup", "1");
   };
