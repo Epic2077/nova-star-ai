@@ -17,19 +17,32 @@ export async function runMemorySummarization(
   model: string | undefined,
 ) {
   try {
-    const { count } = await supabase
+    // Count only user messages so the trigger is predictable.
+    // Run every 10 user messages (roughly every 10 exchanges).
+    const { count: userCount } = await supabase
+      .from("messages")
+      .select("*", { count: "exact", head: true })
+      .eq("chat_id", chatId)
+      .eq("role", "user");
+
+    if (!userCount || userCount % 10 !== 0) return;
+
+    const segmentNumber = userCount / 10;
+
+    // Fetch total count to get the right range of last ~20 messages
+    const { count: totalCount } = await supabase
       .from("messages")
       .select("*", { count: "exact", head: true })
       .eq("chat_id", chatId);
 
-    if (!count || count % 20 !== 0) return;
+    if (!totalCount) return;
 
     const { data: last20Messages } = await supabase
       .from("messages")
       .select("role, content, created_at")
       .eq("chat_id", chatId)
       .order("created_at", { ascending: true })
-      .range(count - 20, count - 1);
+      .range(totalCount - 20, totalCount - 1);
 
     if (!last20Messages || last20Messages.length === 0) return;
 
@@ -73,7 +86,7 @@ SUMMARY:`;
     if (summaryText) {
       const existingSummary = chatData?.memory_summary || "";
       const updatedSummary = existingSummary
-        ? `${existingSummary}\n\n---\n\nSegment ${count / 20}:\n${summaryText}`
+        ? `${existingSummary}\n\n---\n\nSegment ${segmentNumber}:\n${summaryText}`
         : `Segment 1:\n${summaryText}`;
 
       await supabase
@@ -85,7 +98,7 @@ SUMMARY:`;
         .eq("id", chatId);
 
       console.log(
-        `Generated memory summary for chat ${chatId} at message ${count}`,
+        `Generated memory summary for chat ${chatId} at user message ${userCount}`,
       );
     }
   } catch (summaryError) {
