@@ -11,6 +11,17 @@
 - [x] Code execution tool — sandboxed interpreter for computational questions
 - [x] Chat export (PDF / Markdown)
 
+## Memory System
+
+- [x] Memory extraction — two-tier trigger (immediate for important info, cadence for rest)
+- [x] Memory conflict detection — contradictions lower old memory confidence
+- [x] Deduplication — existing memories injected into extraction prompt
+- [x] Confidence decay — old memories slowly lose confidence unless reinforced
+- [x] Insight regeneration — periodic job to recompute insights from active memories
+- [x] Memory prompt — AI instructed to actively use stored memories in conversation
+- [ ] Configure CRON_SECRET env var and set up daily cron for `/api/cron/memory-maintenance`
+- [ ] Memory dashboard for users — view/manage what Nova remembers about them
+
 ## Polish
 
 - [x] Prompt caching — reduce cost/latency for repeated system prompts

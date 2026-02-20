@@ -288,4 +288,45 @@ New (all parallelizable with `Promise.all()`):
 
 <!-- Add your notes here as you work through each table -->
 
+## Table 7 Personal_memmories
+For each person separately for their long term cross-chat memory
+
+even if the user doesn't have an active partnership. 
+if user gets an active partnership later 
+we could:
+Personal memories stay
+Shared memories start accumulating
+
+supabase table is going to look like this:
+
+create table if not exists public.personal_memories (
+  id uuid primary key default gen_random_uuid(),
+
+  user_id uuid not null
+    references auth.users(id)
+    on delete cascade,
+
+  category text not null default 'general'
+    check (category in (
+      'preference',
+      'emotional_need',
+      'important_date',
+      'growth_moment',
+      'pattern',
+      'goal',
+      'general'
+    )),
+
+  content text not null,
+
+  confidence float not null default 1.0
+    check (confidence >= 0 and confidence <= 1),
+
+  is_active boolean not null default true,
+
+  source_message_id text,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 -

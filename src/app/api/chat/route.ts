@@ -446,7 +446,9 @@ export async function POST(req: NextRequest) {
             assistantMessage: insertedAssistantMsg ?? null,
           });
 
-          // Fire-and-forget: record token usage
+          // Background work: token usage, summarization, memory extraction.
+          // We await all of them before closing the stream so serverless
+          // runtimes don't kill the function before they finish.
           const resolvedModel =
             model ??
             (provider === "deepseek" ? "deepseek-chat" : "gpt-4.1-mini");
@@ -454,32 +456,24 @@ export async function POST(req: NextRequest) {
             streamTokenUsage?.totalTokens ??
             estimateTokens(systemMsg + content + fullText);
 
-          void recordTokenUsage(supabase, {
-            userId: user.id,
-            tokensUsed,
-            provider,
-            model: resolvedModel,
-            endpoint: "chat",
-          });
-
-          // Fire-and-forget memory summarization
-          void runMemorySummarization(
-            supabase,
-            chatId,
-            chatData,
-            provider,
-            model,
-          );
-
-          // Fire-and-forget memory extraction (writes to DB tables)
-          void runMemoryExtraction(
-            supabase,
-            chatId,
-            user.id,
-            activePartnership,
-            provider,
-            model,
-          );
+          await Promise.allSettled([
+            recordTokenUsage(supabase, {
+              userId: user.id,
+              tokensUsed,
+              provider,
+              model: resolvedModel,
+              endpoint: "chat",
+            }),
+            runMemorySummarization(supabase, chatId, chatData, provider, model),
+            runMemoryExtraction(
+              supabase,
+              chatId,
+              user.id,
+              activePartnership,
+              provider,
+              model,
+            ),
+          ]);
         } catch (err) {
           console.error("Streaming error:", err);
           sendEvent("error", { error: "Streaming failed" });
