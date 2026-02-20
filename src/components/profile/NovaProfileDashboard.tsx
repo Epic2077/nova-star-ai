@@ -21,6 +21,7 @@ interface NovaProfileData {
   userProfile: UserProfileRow | null;
   partnership: PartnershipRow | null;
   partnerProfile: PartnerProfileRow | null;
+  partnerSeesYou: PartnerProfileRow | null;
   partnerName: string | null;
   personalMemories: PersonalMemoryRow[];
   memories: SharedMemoryRow[];
@@ -122,16 +123,24 @@ export default function NovaProfileDashboard() {
         <PartnerProfileTab
           partnership={data?.partnership ?? null}
           partnerProfile={data?.partnerProfile ?? null}
+          partnerSeesYou={data?.partnerSeesYou ?? null}
           partnerName={data?.partnerName ?? null}
         />
       </TabsContent>
 
       <TabsContent value="personal-memories" className="mt-6">
-        <PersonalMemoriesTab memories={data?.personalMemories ?? []} />
+        <PersonalMemoriesTab
+          memories={data?.personalMemories ?? []}
+          onRefresh={fetchData}
+        />
       </TabsContent>
 
       <TabsContent value="memories" className="mt-6">
-        <SharedMemoriesTab memories={data?.memories ?? []} userId={user.id} />
+        <SharedMemoriesTab
+          memories={data?.memories ?? []}
+          userId={user.id}
+          onRefresh={fetchData}
+        />
       </TabsContent>
 
       <TabsContent value="insights" className="mt-6">

@@ -53,6 +53,7 @@ export async function GET(req: NextRequest) {
   const personalMemories = personalMemoriesRes.data ?? [];
 
   let partnerProfile = null;
+  let partnerSeesYou = null; // partner's quiz answers about the current user
   let memories: unknown[] = [];
   let insights: unknown[] = [];
   let partnerName: string | null = null;
@@ -62,50 +63,67 @@ export async function GET(req: NextRequest) {
       partnership.user_a === user.id ? partnership.user_b : partnership.user_a;
 
     // Fetch partner info, memories, insights, and AI partner profile in parallel
-    const [partnerNameRes, aiPartnerRes, memoriesRes, insightsRes] =
-      await Promise.all([
-        // Partner's display name from user_profiles (linked account)
-        partnerId
-          ? serviceClient
-              .from("user_profiles")
-              .select("name")
-              .eq("id", partnerId)
-              .maybeSingle()
-          : Promise.resolve({ data: null }),
-        // AI-built partner profile (fallback)
-        serviceClient
-          .from("partner_profiles")
-          .select("*")
-          .eq("owner_user_id", user.id)
-          .eq("source", "ai_generated")
-          .maybeSingle(),
-        // Shared memories
-        serviceClient
-          .from("shared_memories")
-          .select("*")
-          .eq("partnership_id", partnership.id)
-          .eq("is_active", true)
-          .order("created_at", { ascending: false }),
-        // Shared insights
-        serviceClient
-          .from("shared_insights")
-          .select("*")
-          .eq("partnership_id", partnership.id)
-          .eq("is_active", true)
-          .order("created_at", { ascending: false }),
-      ]);
+    const [
+      partnerNameRes,
+      aiPartnerRes,
+      partnerSeesYouRes,
+      memoriesRes,
+      insightsRes,
+    ] = await Promise.all([
+      // Partner's display name from user_profiles (linked account)
+      partnerId
+        ? serviceClient
+            .from("user_profiles")
+            .select("name")
+            .eq("id", partnerId)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      // User's own partner profile (any source — ai_generated or quiz_generated)
+      serviceClient
+        .from("partner_profiles")
+        .select("*")
+        .eq("owner_user_id", user.id)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // Partner's quiz answers about the current user ("How they see you")
+      partnerId
+        ? serviceClient
+            .from("partner_profiles")
+            .select("*")
+            .eq("owner_user_id", partnerId)
+            .eq("about_user_id", user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      // Shared memories
+      serviceClient
+        .from("shared_memories")
+        .select("*")
+        .eq("partnership_id", partnership.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+      // Shared insights
+      serviceClient
+        .from("shared_insights")
+        .select("*")
+        .eq("partnership_id", partnership.id)
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+    ]);
 
     partnerName = partnerNameRes.data?.name ?? null;
     partnerProfile = aiPartnerRes.data ?? null;
+    partnerSeesYou = partnerSeesYouRes.data ?? null;
     memories = memoriesRes.data ?? [];
     insights = insightsRes.data ?? [];
   } else {
-    // No active partnership — check for AI-built partner profile
+    // No active partnership — check for any partner profile
     const { data: aiPartner } = await serviceClient
       .from("partner_profiles")
       .select("*")
       .eq("owner_user_id", user.id)
-      .eq("source", "ai_generated")
+      .order("updated_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     partnerProfile = aiPartner ?? null;
@@ -115,6 +133,7 @@ export async function GET(req: NextRequest) {
     userProfile,
     partnership,
     partnerProfile,
+    partnerSeesYou,
     partnerName,
     personalMemories,
     memories,

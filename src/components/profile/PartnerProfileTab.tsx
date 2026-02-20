@@ -8,19 +8,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Heart, Link2, Bot } from "lucide-react";
-import type { PartnerProfileRow } from "@/types/partnerProfile";
+import { Button } from "@/components/ui/button";
+import { Heart, Link2, Bot, Sparkles, Eye } from "lucide-react";
+import type {
+  PartnerProfileRow,
+  PartnerQuizAnswer,
+} from "@/types/partnerProfile";
 import type { PartnershipRow } from "@/types/partnership";
+import Link from "next/link";
 
 interface Props {
   partnership: PartnershipRow | null;
   partnerProfile: PartnerProfileRow | null;
+  partnerSeesYou: PartnerProfileRow | null;
   partnerName: string | null;
 }
 
 export default function PartnerProfileTab({
   partnership,
   partnerProfile,
+  partnerSeesYou,
   partnerName,
 }: Props) {
   // No partnership & no AI-built profile
@@ -163,6 +170,142 @@ export default function PartnerProfileTab({
           </CardContent>
         )}
       </Card>
+
+      {/* Take / retake partner quiz CTA */}
+      <Card className="border-dashed">
+        <CardContent className="flex items-center gap-4 py-5">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-pink-500/10">
+            <Sparkles className="size-5 text-pink-500" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-foreground">
+              {partnerProfile?.quiz_answers
+                ? "Retake the Partner Perception Quiz"
+                : "Take the Partner Perception Quiz"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {partnerProfile?.quiz_answers
+                ? "Update how you see your partner — your previous answers will be replaced."
+                : "Help Nova understand your partner through 8 quick questions. Your partner can see the results too."}
+            </p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="shrink-0">
+            <Link href="/quiz/partner?from=profile">
+              {partnerProfile?.quiz_answers ? "Retake" : "Start Quiz"}
+            </Link>
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* "How they see you" — partner's quiz answers about the current user */}
+      {partnerSeesYou && partnerSeesYou.quiz_answers && (
+        <HowTheySeeYouCard partnerName={partnerName} profile={partnerSeesYou} />
+      )}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  "How they see you" card                                           */
+/* ------------------------------------------------------------------ */
+
+function HowTheySeeYouCard({
+  partnerName,
+  profile,
+}: {
+  partnerName: string | null;
+  profile: PartnerProfileRow;
+}) {
+  const answers = (profile.quiz_answers ?? []) as PartnerQuizAnswer[];
+  const name = partnerName ?? "Your partner";
+
+  return (
+    <Card className="border-pink-500/20 bg-pink-500/2">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Eye className="size-4 text-pink-500" />
+          How {name} sees you
+        </CardTitle>
+        <CardDescription>
+          These are {name}&apos;s answers from the Partner Perception Quiz.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* AI-generated summary */}
+        {profile.ai_notes && (
+          <div>
+            <p className="mb-1 text-sm font-medium text-foreground">
+              {name}&apos;s perspective
+            </p>
+            <p className="text-sm whitespace-pre-line text-muted-foreground">
+              {profile.ai_notes}
+            </p>
+          </div>
+        )}
+
+        {profile.traits && profile.traits.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-foreground">
+                How they describe you
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {profile.traits.map((t) => (
+                  <span
+                    key={t}
+                    className="inline-flex items-center rounded-full border border-pink-500/20 bg-pink-500/5 px-2.5 py-0.5 text-xs text-foreground"
+                  >
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        {profile.important_truths && profile.important_truths.length > 0 && (
+          <>
+            <Separator />
+            <div>
+              <p className="mb-1.5 text-sm font-medium text-foreground">
+                What they value about you
+              </p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {profile.important_truths.map((t) => (
+                  <li key={t} className="flex items-start gap-2">
+                    <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-pink-500/60" />
+                    {t}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
+
+        {/* Raw quiz answers — collapsible */}
+        {answers.length > 0 && (
+          <>
+            <Separator />
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-medium text-foreground hover:text-primary">
+                View full quiz answers
+              </summary>
+              <div className="mt-3 space-y-3">
+                {answers.map((a, i) => (
+                  <div key={i} className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      {a.question}
+                    </p>
+                    <p className="text-sm text-foreground">{a.answer}</p>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

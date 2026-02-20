@@ -9,6 +9,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Bookmark,
   Heart,
   Calendar,
@@ -17,7 +23,11 @@ import {
   Target,
   MessageSquare,
   Filter,
+  ThumbsUp,
+  ThumbsDown,
+  Trash2,
 } from "lucide-react";
+import { toast } from "sonner";
 import type {
   PersonalMemoryRow,
   PersonalMemoryCategory,
@@ -25,6 +35,7 @@ import type {
 
 interface Props {
   memories: PersonalMemoryRow[];
+  onRefresh?: () => void;
 }
 
 const CATEGORY_META: Record<
@@ -68,7 +79,46 @@ const CATEGORY_META: Record<
   },
 };
 
-export default function PersonalMemoriesTab({ memories }: Props) {
+async function memoryAction(
+  id: string,
+  action: "confirm" | "wrong" | "delete",
+  onRefresh?: () => void,
+) {
+  const method = action === "delete" ? "DELETE" : "PATCH";
+  const body =
+    action === "delete"
+      ? { id, type: "personal" }
+      : { id, type: "personal", action };
+
+  const res = await fetch("/api/nova-profile/memory", {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    toast.error("Something went wrong. Please try again.");
+    return;
+  }
+
+  const data = await res.json();
+
+  if (action === "confirm") {
+    toast.success("Memory confirmed — confidence boosted.");
+  } else if (action === "wrong") {
+    toast.success(
+      data.deactivated
+        ? "Memory removed — confidence was too low."
+        : "Memory marked as wrong — confidence lowered.",
+    );
+  } else {
+    toast.success("Memory deleted.");
+  }
+
+  onRefresh?.();
+}
+
+export default function PersonalMemoriesTab({ memories, onRefresh }: Props) {
   const [filter, setFilter] = useState<PersonalMemoryCategory | "all">("all");
 
   if (!memories.length) {
@@ -141,7 +191,7 @@ export default function PersonalMemoriesTab({ memories }: Props) {
               return (
                 <div
                   key={mem.id}
-                  className="flex items-start gap-3 rounded-lg border border-border p-3"
+                  className="group flex items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:bg-muted/40"
                 >
                   <span
                     className={`mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md border ${meta.color}`}
@@ -162,6 +212,59 @@ export default function PersonalMemoriesTab({ memories }: Props) {
                       )}
                     </div>
                   </div>
+
+                  {/* Action buttons — visible on hover (desktop) / always visible on touch */}
+                  <TooltipProvider>
+                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 max-sm:opacity-100">
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() =>
+                              memoryAction(mem.id, "confirm", onRefresh)
+                            }
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-green-500/10 hover:text-green-500"
+                          >
+                            <ThumbsUp className="size-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Confirm — boost confidence</p>
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() =>
+                              memoryAction(mem.id, "wrong", onRefresh)
+                            }
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-orange-500/10 hover:text-orange-500"
+                          >
+                            <ThumbsDown className="size-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Wrong — lower confidence</p>
+                        </TooltipContent>
+                      </Tooltip>
+
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={() =>
+                              memoryAction(mem.id, "delete", onRefresh)
+                            }
+                            className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-red-500/10 hover:text-red-500"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">
+                          <p>Delete memory</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
+                  </TooltipProvider>
                 </div>
               );
             })}

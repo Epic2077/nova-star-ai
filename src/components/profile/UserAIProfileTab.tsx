@@ -84,9 +84,9 @@ export default function UserAIProfileTab({ profile, onSaved }: Props) {
               </CardDescription>
             </div>
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
-              className="shrink-0 gap-1.5"
+              className="shrink-0 gap-1.5 bg-linear-0 from-blue-700 to-violet-700 text-white hover:bg-linear-0 focus-visible:bg-linear-0"
               onClick={() => router.push("/quiz?from=profile")}
             >
               <ClipboardList className="size-4" />
