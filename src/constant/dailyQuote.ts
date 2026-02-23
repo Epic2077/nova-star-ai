@@ -305,7 +305,7 @@ function updateDailyQuote() {
   ];
 
   if (textOrder >= quotes.length) {
-    textOrder = 0;
+    textOrder = 1;
   }
   dailyQuote = quotes[textOrder];
   textOrder++;

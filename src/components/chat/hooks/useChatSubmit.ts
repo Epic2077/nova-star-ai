@@ -3,10 +3,6 @@ import { Message } from "@/types/chat";
 import type { FileAttachment } from "@/types/chat";
 import type { ToolToggles } from "../ChatToolbar";
 import { toast } from "sonner";
-import {
-  shouldUseReferenceLayer,
-  shouldUseInsightLayer,
-} from "@/lib/promptLayerDetection";
 
 interface UseChatSubmitParams {
   chatId: string | undefined;
@@ -20,6 +16,13 @@ interface UseChatSubmitParams {
   userScrolledAwayRef: React.MutableRefObject<boolean>;
   wasStreamingRef: React.MutableRefObject<boolean>;
   generateTitle: (chatId: string, firstMessage: string) => void;
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    err instanceof DOMException &&
+    (err.name === "AbortError" || err.code === 20)
+  );
 }
 
 /**
@@ -46,6 +49,15 @@ export function useChatSubmit({
   generateTitle,
 }: UseChatSubmitParams) {
   // ── Core submission (files already uploaded) ──────────────────
+  const [isGenerating, setIsGenerating] = React.useState(false);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
+  /** Abort the current generation (fetch + SSE read). */
+  const stopGeneration = React.useCallback(() => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+  }, []);
+
   const submitMessage = async (
     content: string,
     opts?: {
@@ -84,13 +96,16 @@ export function useChatSubmit({
       requestAnimationFrame(() => scrollToBottom("smooth")),
     );
     setIsAwaitingResponse(true);
+    setIsGenerating(true);
+
+    // Create an AbortController for this request.
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const body = {
         chatId,
         content,
-        useReferenceLayer: shouldUseReferenceLayer(content),
-        useInsightLayer: shouldUseInsightLayer(content),
         useWebSearch: toolOpts.webSearch,
         useDeepThinking: toolOpts.deepThinking,
         attachments,
@@ -101,6 +116,7 @@ export function useChatSubmit({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: abortController.signal,
       });
 
       if (!resp.ok) {
@@ -272,6 +288,9 @@ export function useChatSubmit({
         void generateTitle(chatId, content);
       }
     } catch (err) {
+      // If the user stopped generation, don't show an error — keep partial text.
+      if (isAbortError(err)) return;
+
       toast.error(
         err instanceof Error ? err.message : "Failed to get AI response",
       );
@@ -283,6 +302,9 @@ export function useChatSubmit({
       };
       setMessages((prev) => [...prev, failedMsg]);
     } finally {
+      abortControllerRef.current = null;
+      setIsGenerating(false);
+      setStreamingMessageId(null);
       setIsAwaitingResponse(false);
     }
   };
@@ -340,5 +362,249 @@ export function useChatSubmit({
     });
   };
 
-  return { handleSubmit, submitMessage };
+  // ── Edit a user message ───────────────────────────────────────
+  const editMessage = async (messageId: string, newContent: string) => {
+    if (!chatId) return;
+
+    try {
+      const resp = await fetch("/api/chat/messages", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId, content: newContent }),
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(
+          (err as { error?: string }).error || "Failed to edit message",
+        );
+      }
+
+      const updated = await resp.json();
+
+      // Update the message in local state
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, content: updated.content } : m,
+        ),
+      );
+
+      toast.success("Message updated");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to edit message",
+      );
+    }
+  };
+
+  // ── Regenerate an assistant response (adds alternative) ───────
+  const regenerateMessage = async (assistantMessageId: string) => {
+    if (!chatId) return;
+
+    // Find the assistant message and the user message before it
+    const msgIndex = messages.findIndex((m) => m.id === assistantMessageId);
+    if (msgIndex < 0) return;
+
+    const assistantMsg = messages[msgIndex];
+    if (assistantMsg.role !== "assistant") return;
+
+    // Find the preceding user message
+    let userContent = "";
+    for (let i = msgIndex - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        userContent = messages[i].content;
+        break;
+      }
+    }
+    if (!userContent) return;
+
+    setIsAwaitingResponse(true);
+    setIsGenerating(true);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    const streamId = `regen-${Date.now()}`;
+
+    // Mark the assistant message as streaming with empty new content
+    setMessages((prev) =>
+      prev.map((m) => {
+        if (m.id !== assistantMessageId) return m;
+        const existing = m.alternatives ?? [];
+        return {
+          ...m,
+          alternatives: existing,
+          activeAltIndex: existing.length + 1, // point to the new one (being generated)
+          _regenStreamId: streamId, // internal marker
+        } as Message & { _regenStreamId: string };
+      }),
+    );
+
+    try {
+      const resp = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId,
+          content: userContent,
+          useWebSearch: false,
+          useDeepThinking: false,
+          attachments: [],
+          skipSaveUser: true, // Tell the API to skip saving the user msg again
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!resp.ok) {
+        const errJson = await resp.json().catch(() => ({}));
+        throw new Error(
+          (errJson as { error?: string }).error || "Regeneration failed",
+        );
+      }
+
+      setIsAwaitingResponse(false);
+      wasStreamingRef.current = true;
+      userScrolledAwayRef.current = false;
+
+      const reader = resp.body?.getReader();
+      const decoder = new TextDecoder();
+      let sseBuffer = "";
+      let currentEventType = "";
+      let regenText = "";
+      let regenThinking = "";
+
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            sseBuffer += decoder.decode(value, { stream: true });
+            const lines = sseBuffer.split("\n");
+            sseBuffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              const trimmed = line.trim();
+              if (!trimmed) {
+                currentEventType = "";
+                continue;
+              }
+              if (trimmed.startsWith("event: ")) {
+                currentEventType = trimmed.slice(7);
+                continue;
+              }
+              if (trimmed.startsWith("data: ")) {
+                const jsonStr = trimmed.slice(6);
+                let parsed: Record<string, unknown>;
+                try {
+                  parsed = JSON.parse(jsonStr);
+                } catch {
+                  continue;
+                }
+
+                if (currentEventType === "thinking") {
+                  regenThinking += (parsed.text as string) ?? "";
+                } else if (currentEventType === "content") {
+                  regenText += (parsed.text as string) ?? "";
+                  // Live update the new alternative content
+                  setMessages((prev) =>
+                    prev.map((m) => {
+                      if (m.id !== assistantMessageId) return m;
+                      const alts = [...(m.alternatives ?? [])];
+                      const altIdx = (m.activeAltIndex ?? 1) - 1;
+                      alts[altIdx] = {
+                        id: streamId,
+                        content: regenText,
+                        metadata: regenThinking
+                          ? { thinking: regenThinking }
+                          : undefined,
+                      };
+                      return { ...m, alternatives: alts };
+                    }),
+                  );
+                  if (!userScrolledAwayRef.current) {
+                    requestAnimationFrame(() => scrollToBottom("smooth"));
+                  }
+                } else if (currentEventType === "complete") {
+                  const finalData = parsed as {
+                    reply?: string;
+                    thinking?: string;
+                    assistantMessage?: Record<string, unknown>;
+                  };
+                  const finalText = (finalData.reply as string) ?? regenText;
+                  const finalThinking =
+                    (finalData.thinking as string) ?? regenThinking;
+                  const finalId =
+                    (finalData.assistantMessage?.id as string) ?? streamId;
+
+                  setMessages((prev) =>
+                    prev.map((m) => {
+                      if (m.id !== assistantMessageId) return m;
+                      const alts = [...(m.alternatives ?? [])];
+                      const altIdx = (m.activeAltIndex ?? 1) - 1;
+                      alts[altIdx] = {
+                        id: finalId,
+                        content: finalText,
+                        metadata: finalThinking
+                          ? { thinking: finalThinking }
+                          : undefined,
+                      };
+                      return { ...m, alternatives: alts };
+                    }),
+                  );
+                } else if (currentEventType === "error") {
+                  throw new Error(
+                    (parsed.error as string) || "Regeneration failed",
+                  );
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+    } catch (err) {
+      if (isAbortError(err)) return;
+      toast.error(err instanceof Error ? err.message : "Regeneration failed");
+      // Revert to the previous alternative
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== assistantMessageId) return m;
+          const alts = m.alternatives ?? [];
+          // Remove the failed partial alt
+          const cleaned = alts.filter((a) => a.id !== streamId);
+          return {
+            ...m,
+            alternatives: cleaned,
+            activeAltIndex: Math.max(0, cleaned.length),
+          };
+        }),
+      );
+    } finally {
+      abortControllerRef.current = null;
+      setIsGenerating(false);
+      setStreamingMessageId(null);
+      setIsAwaitingResponse(false);
+    }
+  };
+
+  // ── Carousel navigation ───────────────────────────────────────
+  const setAltIndex = (messageId: string, index: number) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId ? { ...m, activeAltIndex: index } : m,
+      ),
+    );
+  };
+
+  return {
+    handleSubmit,
+    submitMessage,
+    stopGeneration,
+    isGenerating,
+    editMessage,
+    regenerateMessage,
+    setAltIndex,
+  };
 }

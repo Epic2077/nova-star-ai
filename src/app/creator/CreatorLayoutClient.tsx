@@ -64,7 +64,21 @@ export default function CreatorLayoutClient({
   const router = useRouter();
   const { signOut } = useUser();
 
-  const currentTab = pathname.startsWith("/creator/chats") ? "chats" : "user";
+  const currentTab = pathname.startsWith("/creator/dashboard")
+    ? "dashboard"
+    : pathname.startsWith("/creator/chats")
+      ? "chats"
+      : pathname.startsWith("/creator/ai-profile")
+        ? "ai-profile"
+        : pathname.startsWith("/creator/personal-memories")
+          ? "personal-memories"
+          : pathname.startsWith("/creator/memories")
+            ? "memories"
+            : pathname.startsWith("/creator/insights")
+              ? "insights"
+              : pathname.startsWith("/creator/usage")
+                ? "usage"
+                : "user";
 
   const handleLogout = async () => {
     try {
@@ -86,14 +100,28 @@ export default function CreatorLayoutClient({
               <Tabs
                 value={currentTab}
                 onValueChange={(value) => {
-                  router.push(
-                    value === "chats" ? "/creator/chats" : "/creator/user",
-                  );
+                  const routes: Record<string, string> = {
+                    dashboard: "/creator/dashboard",
+                    user: "/creator/user",
+                    chats: "/creator/chats",
+                    "ai-profile": "/creator/ai-profile",
+                    "personal-memories": "/creator/personal-memories",
+                    memories: "/creator/memories",
+                    insights: "/creator/insights",
+                    usage: "/creator/usage",
+                  };
+                  router.push(routes[value] ?? "/creator/user");
                 }}
               >
                 <TabsList variant="default">
-                  <TabsTrigger value="user">User & Profile</TabsTrigger>
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
+                  <TabsTrigger value="user">User</TabsTrigger>
                   <TabsTrigger value="chats">Chats</TabsTrigger>
+                  <TabsTrigger value="ai-profile">AI Profile</TabsTrigger>
+                  <TabsTrigger value="personal-memories">Personal</TabsTrigger>
+                  <TabsTrigger value="memories">Shared</TabsTrigger>
+                  <TabsTrigger value="insights">Insights</TabsTrigger>
+                  <TabsTrigger value="usage">Usage</TabsTrigger>
                 </TabsList>
               </Tabs>
               <Button variant="outline" onClick={handleLogout}>

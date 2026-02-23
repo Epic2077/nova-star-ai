@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
+import { fetchUsageStats } from "@/lib/ai/tokenUsage";
 
 type ChatRow = {
   id: string;
@@ -50,7 +51,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: requesterProfile } = await service
-      .from("profiles")
+      .from("user_profiles")
       .select("role")
       .eq("id", user.id)
       .single();
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data: profile } = await service
-      .from("profiles")
+      .from("user_profiles")
       .select("*")
       .eq("id", targetUser.id)
       .maybeSingle();
@@ -151,6 +152,90 @@ export async function GET(request: NextRequest) {
       messages: messages.filter((message) => message.chat_id === chat.id),
     }));
 
+    // ── Nova AI data (partnership, partner profile, memories, insights) ──
+    const [userProfileRes, partnershipRes, personalMemoriesRes] =
+      await Promise.all([
+        service
+          .from("user_profiles")
+          .select("*")
+          .eq("id", targetUser.id)
+          .maybeSingle(),
+        service
+          .from("partnerships")
+          .select("*")
+          .or(`user_a.eq.${targetUser.id},user_b.eq.${targetUser.id}`)
+          .eq("status", "active")
+          .maybeSingle(),
+        service
+          .from("personal_memories")
+          .select("*")
+          .eq("user_id", targetUser.id)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false }),
+      ]);
+
+    const userProfile = userProfileRes.data ?? null;
+    const partnership = partnershipRes.data ?? null;
+    const personalMemories = personalMemoriesRes.data ?? [];
+
+    let partnerProfile = null;
+    let novaMemories: unknown[] = [];
+    let novaInsights: unknown[] = [];
+    let partnerName: string | null = null;
+
+    if (partnership) {
+      const partnerId =
+        partnership.user_a === targetUser.id
+          ? partnership.user_b
+          : partnership.user_a;
+
+      const [partnerNameRes, aiPartnerRes, memoriesRes, insightsRes] =
+        await Promise.all([
+          partnerId
+            ? service
+                .from("user_profiles")
+                .select("name")
+                .eq("id", partnerId)
+                .maybeSingle()
+            : Promise.resolve({ data: null }),
+          service
+            .from("partner_profiles")
+            .select("*")
+            .eq("owner_user_id", targetUser.id)
+            .eq("source", "ai_generated")
+            .maybeSingle(),
+          service
+            .from("shared_memories")
+            .select("*")
+            .eq("partnership_id", partnership.id)
+            .eq("is_active", true)
+            .order("created_at", { ascending: false }),
+          service
+            .from("shared_insights")
+            .select("*")
+            .eq("partnership_id", partnership.id)
+            .eq("is_active", true)
+            .order("created_at", { ascending: false }),
+        ]);
+
+      partnerName = partnerNameRes.data?.name ?? null;
+      partnerProfile = aiPartnerRes.data ?? null;
+      novaMemories = memoriesRes.data ?? [];
+      novaInsights = insightsRes.data ?? [];
+    } else {
+      const { data: aiPartner } = await service
+        .from("partner_profiles")
+        .select("*")
+        .eq("owner_user_id", targetUser.id)
+        .eq("source", "ai_generated")
+        .maybeSingle();
+
+      partnerProfile = aiPartner ?? null;
+    }
+
+    // ── Token usage stats ──
+    const usageStats = await fetchUsageStats(service, targetUser.id);
+
     return NextResponse.json({
       user: {
         id: targetUser.id,
@@ -164,6 +249,16 @@ export async function GET(request: NextRequest) {
       },
       profile,
       chats: chatsWithMessages,
+      nova: {
+        userProfile,
+        partnership,
+        partnerProfile,
+        partnerName,
+        personalMemories,
+        memories: novaMemories,
+        insights: novaInsights,
+      },
+      usage: usageStats,
     });
   } catch (error) {
     console.error("Admin user-data API error:", error);

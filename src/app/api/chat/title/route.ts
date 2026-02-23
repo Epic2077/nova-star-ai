@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callProvider } from "@/lib/ai/provider";
 import { createAuthClient, createServiceClient } from "@/lib/supabase/server";
+import { recordTokenUsage, estimateTokens } from "@/lib/ai/tokenUsage";
 
 export async function POST(req: NextRequest) {
   try {
@@ -73,6 +74,19 @@ export async function POST(req: NextRequest) {
         { status: result.status },
       );
     }
+
+    // Fire-and-forget: record token usage for title generation
+    const tokensUsed =
+      result.tokenUsage?.totalTokens ??
+      estimateTokens(titlePrompt + (result.text ?? ""));
+    void recordTokenUsage(supabase, {
+      userId: user.id,
+      tokensUsed,
+      provider,
+      model:
+        model ?? (provider === "deepseek" ? "deepseek-chat" : "gpt-4.1-mini"),
+      endpoint: "title",
+    });
 
     // sanitize and enforce 3-6 words (best-effort): remove quotes/punctuation and trim
     let title = String(result.text || "")

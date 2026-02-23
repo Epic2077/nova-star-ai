@@ -29,6 +29,22 @@ export type MessageMetadata = {
   thinking?: string;
   toolResults?: ToolResult[];
   attachments?: FileAttachment[];
+  codeResult?: CodeExecutionResult;
+};
+
+export type CodeExecutionResult = {
+  code: string;
+  language: string;
+  output: string;
+  error?: string;
+  executionTime: number;
+};
+
+/** An alternative assistant response (for regeneration). */
+export type MessageAlternative = {
+  id: string;
+  content: string;
+  metadata?: MessageMetadata;
 };
 
 /* ------------------------------------------------------------------ */
@@ -41,6 +57,10 @@ export type Message = {
   content: string;
   type?: MessageType;
   metadata?: MessageMetadata;
+  /** Alternative responses for assistant messages (regeneration carousel). */
+  alternatives?: MessageAlternative[];
+  /** Index of the currently active alternative (0 = original). */
+  activeAltIndex?: number;
 };
 
 export type MessageRecord = {

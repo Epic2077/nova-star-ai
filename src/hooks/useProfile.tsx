@@ -22,12 +22,24 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
     const loadingProfile = async () => {
       try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) {
+          if (isMounted) setRole(null);
+          return;
+        }
+
         const { data, error } = await supabase
-          .from("profiles")
+          .from("user_profiles")
           .select("role")
+          .eq("id", user.id)
           .maybeSingle();
         if (error) {
-          throw error;
+          // RLS may block access or row may not exist yet — treat as no role
+          console.warn("useProfile: could not load role —", error.message);
+          if (isMounted) setRole(null);
+          return;
         }
         if (isMounted) {
           setRole(data?.role ?? null);

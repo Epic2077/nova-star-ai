@@ -37,7 +37,12 @@ export async function middleware(request: NextRequest) {
   const isLoggedIn = Boolean(user);
   const { pathname } = request.nextUrl;
 
-  if (pathname.startsWith("/chat") && !isLoggedIn) {
+  if (
+    (pathname.startsWith("/chat") ||
+      pathname.startsWith("/profile") ||
+      pathname.startsWith("/quiz")) &&
+    !isLoggedIn
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
@@ -73,6 +78,8 @@ export const config = {
   matcher: [
     "/",
     "/chat/:path*",
+    "/profile/:path*",
+    "/quiz/:path*",
     "/login/:path*",
     "/signup/:path*",
     "/creator/:path*",

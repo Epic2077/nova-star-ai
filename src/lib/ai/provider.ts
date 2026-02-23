@@ -30,10 +30,21 @@ export type ProviderOptions = {
   temperature?: number;
   /** Enable deep-thinking / reasoning mode */
   deepThinking?: boolean;
+  /** AbortSignal to cancel in-flight requests */
+  signal?: AbortSignal;
 };
 
 export type ProviderResult =
-  | { ok: true; text: string; thinking?: string }
+  | {
+      ok: true;
+      text: string;
+      thinking?: string;
+      tokenUsage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      };
+    }
   | { ok: false; error: string; status: number };
 
 /* ------------------------------------------------------------------ */
@@ -123,7 +134,23 @@ export async function callProvider(
     const text = choice?.message?.content ?? "";
     const thinking = choice?.message?.reasoning_content ?? undefined;
 
-    return { ok: true, text, thinking };
+    // Extract token usage
+    const usage = payload.usage as
+      | {
+          prompt_tokens?: number;
+          completion_tokens?: number;
+          total_tokens?: number;
+        }
+      | undefined;
+    const tokenUsage = usage?.total_tokens
+      ? {
+          promptTokens: usage.prompt_tokens ?? 0,
+          completionTokens: usage.completion_tokens ?? 0,
+          totalTokens: usage.total_tokens,
+        }
+      : undefined;
+
+    return { ok: true, text, thinking, tokenUsage };
   }
 
   // OpenAI (Responses API)
@@ -180,7 +207,20 @@ export async function callProvider(
 
   const text =
     payload.output?.[0]?.content?.[0]?.text ?? payload.output_text ?? "";
-  return { ok: true, text, thinking: thinking || undefined };
+
+  // Extract token usage from OpenAI
+  const oaiUsage = payload.usage as
+    | { input_tokens?: number; output_tokens?: number; total_tokens?: number }
+    | undefined;
+  const tokenUsage = oaiUsage?.total_tokens
+    ? {
+        promptTokens: oaiUsage.input_tokens ?? 0,
+        completionTokens: oaiUsage.output_tokens ?? 0,
+        totalTokens: oaiUsage.total_tokens,
+      }
+    : undefined;
+
+  return { ok: true, text, thinking: thinking || undefined, tokenUsage };
 }
 
 /* ------------------------------------------------------------------ */
@@ -190,7 +230,16 @@ export async function callProvider(
 export type StreamChunk =
   | { type: "thinking"; text: string }
   | { type: "content"; text: string }
-  | { type: "done"; fullText: string; fullThinking: string }
+  | {
+      type: "done";
+      fullText: string;
+      fullThinking: string;
+      tokenUsage?: {
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+      };
+    }
   | { type: "error"; error: string };
 
 /**
@@ -209,6 +258,7 @@ export async function* callProviderStream(
     model,
     temperature = 0.7,
     deepThinking = false,
+    signal,
   } = opts;
 
   const msgArray = messages;
@@ -257,6 +307,7 @@ export async function* callProviderStream(
         stream: true,
         ...bodyExtras,
       }),
+      signal,
     });
 
     if (!resp.ok) {
@@ -299,6 +350,7 @@ export async function* callProviderStream(
       Authorization: `Bearer ${OPENAI_KEY}`,
     },
     body: JSON.stringify(body),
+    signal,
   });
 
   if (!resp.ok) {
@@ -329,6 +381,9 @@ async function* parseSSEStream(
   let buffer = "";
   let fullText = "";
   let fullThinking = "";
+  let tokenUsage:
+    | { promptTokens: number; completionTokens: number; totalTokens: number }
+    | undefined;
 
   try {
     while (true) {
@@ -361,6 +416,23 @@ async function* parseSSEStream(
               }>
             | undefined;
           const delta = choices?.[0]?.delta;
+
+          // Capture usage from the final chunk
+          const usage = parsed.usage as
+            | {
+                prompt_tokens?: number;
+                completion_tokens?: number;
+                total_tokens?: number;
+              }
+            | undefined;
+          if (usage?.total_tokens) {
+            tokenUsage = {
+              promptTokens: usage.prompt_tokens ?? 0,
+              completionTokens: usage.completion_tokens ?? 0,
+              totalTokens: usage.total_tokens,
+            };
+          }
+
           if (!delta) continue;
 
           if (delta.reasoning_content) {
@@ -374,6 +446,26 @@ async function* parseSSEStream(
         } else {
           // OpenAI Responses API streaming format
           const eventType = parsed.type as string | undefined;
+
+          // Capture usage from response.completed event
+          if (eventType === "response.completed") {
+            const response = parsed.response as
+              | {
+                  usage?: {
+                    input_tokens?: number;
+                    output_tokens?: number;
+                    total_tokens?: number;
+                  };
+                }
+              | undefined;
+            if (response?.usage?.total_tokens) {
+              tokenUsage = {
+                promptTokens: response.usage.input_tokens ?? 0,
+                completionTokens: response.usage.output_tokens ?? 0,
+                totalTokens: response.usage.total_tokens,
+              };
+            }
+          }
 
           if (eventType === "response.reasoning_summary_text.delta") {
             const delta = (parsed.delta as string) ?? "";
@@ -395,5 +487,5 @@ async function* parseSSEStream(
     reader.releaseLock();
   }
 
-  yield { type: "done", fullText, fullThinking };
+  yield { type: "done", fullText, fullThinking, tokenUsage };
 }

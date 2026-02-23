@@ -255,12 +255,14 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
               }}
               onInput={(event) => {
                 const target = event.currentTarget;
+                const prevScroll = window.scrollY;
                 target.style.height = "auto";
                 const nextHeight = Math.min(
                   target.scrollHeight,
                   maxTextareaHeight,
                 );
                 target.style.height = `${nextHeight}px`;
+                window.scrollTo({ top: prevScroll });
               }}
               className="w-full min-h-14 text-lg max-h-50 resize-none rounded-2xl px-6 pt-3 pb-2
               bg-transparent

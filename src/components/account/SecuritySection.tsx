@@ -23,12 +23,17 @@ export default function SecuritySection() {
   const router = useRouter();
   const supabase = createSupabaseBrowserClient();
 
+  const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [saving, setSaving] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const handlePasswordChange = async () => {
+    if (!oldPassword) {
+      toast.error("Please enter your current password");
+      return;
+    }
     if (!newPassword) {
       toast.error("Please enter a new password");
       return;
@@ -44,10 +49,21 @@ export default function SecuritySection() {
 
     setSaving(true);
     try {
+      // Verify the current password by re-authenticating
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: user?.email ?? "",
+        password: oldPassword,
+      });
+      if (signInError) {
+        toast.error("Current password is incorrect");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
       });
       if (error) throw error;
+      setOldPassword("");
       setNewPassword("");
       setConfirmPassword("");
       toast.success("Password updated successfully");
@@ -101,6 +117,16 @@ export default function SecuritySection() {
           </div>
 
           <div className="grid gap-2 max-w-sm">
+            <Label htmlFor="old-password">Current password</Label>
+            <Input
+              id="old-password"
+              type="password"
+              value={oldPassword}
+              onChange={(e) => setOldPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+          <div className="grid gap-2 max-w-sm">
             <Label htmlFor="new-password">New password</Label>
             <Input
               id="new-password"
@@ -124,7 +150,7 @@ export default function SecuritySection() {
 
           <Button
             onClick={handlePasswordChange}
-            disabled={saving || !newPassword}
+            disabled={saving || !oldPassword || !newPassword}
           >
             {saving && <Loader2 className="mr-2 size-4 animate-spin" />}
             Update password
