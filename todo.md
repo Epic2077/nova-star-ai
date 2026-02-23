@@ -21,6 +21,7 @@
 - [x] Memory prompt — AI instructed to actively use stored memories in conversation
 - [ ] Configure CRON_SECRET env var and set up daily cron for `/api/cron/memory-maintenance`
 - [ ] Memory dashboard for users — view/manage what Nova remembers about them
+- [ ] Group Chat for partners
 
 ## Polish
 

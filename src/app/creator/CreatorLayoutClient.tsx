@@ -64,19 +64,21 @@ export default function CreatorLayoutClient({
   const router = useRouter();
   const { signOut } = useUser();
 
-  const currentTab = pathname.startsWith("/creator/chats")
-    ? "chats"
-    : pathname.startsWith("/creator/ai-profile")
-      ? "ai-profile"
-      : pathname.startsWith("/creator/personal-memories")
-        ? "personal-memories"
-        : pathname.startsWith("/creator/memories")
-          ? "memories"
-          : pathname.startsWith("/creator/insights")
-            ? "insights"
-            : pathname.startsWith("/creator/usage")
-              ? "usage"
-              : "user";
+  const currentTab = pathname.startsWith("/creator/dashboard")
+    ? "dashboard"
+    : pathname.startsWith("/creator/chats")
+      ? "chats"
+      : pathname.startsWith("/creator/ai-profile")
+        ? "ai-profile"
+        : pathname.startsWith("/creator/personal-memories")
+          ? "personal-memories"
+          : pathname.startsWith("/creator/memories")
+            ? "memories"
+            : pathname.startsWith("/creator/insights")
+              ? "insights"
+              : pathname.startsWith("/creator/usage")
+                ? "usage"
+                : "user";
 
   const handleLogout = async () => {
     try {
@@ -99,6 +101,7 @@ export default function CreatorLayoutClient({
                 value={currentTab}
                 onValueChange={(value) => {
                   const routes: Record<string, string> = {
+                    dashboard: "/creator/dashboard",
                     user: "/creator/user",
                     chats: "/creator/chats",
                     "ai-profile": "/creator/ai-profile",
@@ -111,6 +114,7 @@ export default function CreatorLayoutClient({
                 }}
               >
                 <TabsList variant="default">
+                  <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
                   <TabsTrigger value="user">User</TabsTrigger>
                   <TabsTrigger value="chats">Chats</TabsTrigger>
                   <TabsTrigger value="ai-profile">AI Profile</TabsTrigger>
