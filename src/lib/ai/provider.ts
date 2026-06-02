@@ -83,8 +83,8 @@ export async function callProvider(
     }
 
     const resolvedModel = deepThinking
-      ? "deepseek-reasoner"
-      : (model ?? "deepseek-chat");
+      ? "deepseek-v4-pro"
+      : (model ?? "deepseek-v4-flash");
 
     // deepseek-reasoner doesn't accept temperature or system messages
     // in the same way — the system message must become a user message prefix
@@ -271,8 +271,8 @@ export async function* callProviderStream(
     }
 
     const resolvedModel = deepThinking
-      ? "deepseek-reasoner"
-      : (model ?? "deepseek-chat");
+      ? "deepseek-v4-pro"
+      : (model ?? "deepseek-v4-flash");
 
     let finalMessages = msgArray;
     const bodyExtras: Record<string, unknown> = {};
