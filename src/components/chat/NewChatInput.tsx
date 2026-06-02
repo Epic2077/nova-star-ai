@@ -12,6 +12,7 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { Spinner } from "../ui/spinner";
 import isRTL from "@/lib/rtlDetect";
+import isMobileDevice from "@/lib/isMobile";
 import ChatToolbar, { type ToolToggles } from "./ChatToolbar";
 import FilePreview from "./message/FilePreview";
 import type { FileAttachment } from "@/types/chat";
@@ -49,9 +50,7 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
     setTools((prev) => ({ ...prev, [tool]: !prev[tool] }));
   };
 
-  const isMobile =
-    typeof navigator !== "undefined" &&
-    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isMobile = isMobileDevice();
 
   useEffect(() => {
     const onPageLoad = () => {
@@ -244,7 +243,10 @@ const NewChatInput = ({ userInfo, input, setInput }: ChatInputProps) => {
               disabled={isSubmitting}
               onPaste={handlePaste}
               onKeyDown={(event) => {
+                // On mobile, Enter inserts a newline (like Shift+Enter) — the
+                // send arrow is the only way to submit. On desktop, Enter sends.
                 if (
+                  !isMobile &&
                   event.key === "Enter" &&
                   !event.shiftKey &&
                   input.trim().length > 0

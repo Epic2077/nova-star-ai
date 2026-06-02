@@ -7,6 +7,7 @@ import { CameraIcon, PlusIcon, SendHorizontalIcon, Square } from "lucide-react";
 import { Button } from "../ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import isRTL from "@/lib/rtlDetect";
+import isMobileDevice from "@/lib/isMobile";
 import ChatToolbar, { type ToolToggles } from "./ChatToolbar";
 import FilePreview from "./message/FilePreview";
 import type { FileAttachment } from "@/types/chat";
@@ -70,9 +71,7 @@ const ChatInput = ({
     }
   }, [input]);
 
-  const isMobile =
-    typeof navigator !== "undefined" &&
-    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isMobile = isMobileDevice();
 
   return (
     <div className="">
@@ -112,7 +111,10 @@ const ChatInput = ({
             rows={1}
             onPaste={handlePaste}
             onKeyDown={(event) => {
+              // On mobile, Enter inserts a newline (like Shift+Enter) — the
+              // send arrow is the only way to submit. On desktop, Enter sends.
               if (
+                !isMobile &&
                 event.key === "Enter" &&
                 !event.shiftKey &&
                 (input.trim().length > 0 || pendingFiles.length > 0)

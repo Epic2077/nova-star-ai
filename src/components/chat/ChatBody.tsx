@@ -210,7 +210,7 @@ const ChatBody = () => {
       </div>
 
       {showScrollToBottom ? (
-        <div className="fixed left-230 -translate-x-1/2 bottom-40 z-30">
+        <div className="fixed left-1/2 -translate-x-1/2 bottom-40 z-30">
           <Button
             variant="ghost"
             className="rounded-full w-10 h-10 shadow-lg bg-muted/70 hover:bg-muted"

@@ -3,6 +3,7 @@ import { Message } from "@/types/chat";
 import type { FileAttachment } from "@/types/chat";
 import type { ToolToggles } from "../ChatToolbar";
 import { toast } from "sonner";
+import isMobileDevice from "@/lib/isMobile";
 
 interface UseChatSubmitParams {
   chatId: string | undefined;
@@ -48,6 +49,11 @@ export function useChatSubmit({
   wasStreamingRef,
   generateTitle,
 }: UseChatSubmitParams) {
+  // On mobile we don't auto-scroll while a response is streaming — it fights
+  // the user's own scrolling and makes the chat hard to read. Desktop keeps
+  // the follow-the-stream behaviour.
+  const isMobile = isMobileDevice();
+
   // ── Core submission (files already uploaded) ──────────────────
   const [isGenerating, setIsGenerating] = React.useState(false);
   const abortControllerRef = React.useRef<AbortController | null>(null);
@@ -197,7 +203,7 @@ export function useChatSubmit({
                         : m,
                     ),
                   );
-                  if (!userScrolledAwayRef.current) {
+                  if (!isMobile && !userScrolledAwayRef.current) {
                     requestAnimationFrame(() => scrollToBottom("smooth"));
                   }
                 } else if (eventType === "content") {
@@ -210,7 +216,7 @@ export function useChatSubmit({
                         : m,
                     ),
                   );
-                  if (!userScrolledAwayRef.current) {
+                  if (!isMobile && !userScrolledAwayRef.current) {
                     requestAnimationFrame(() => scrollToBottom("smooth"));
                   }
                 } else if (eventType === "complete") {
@@ -522,7 +528,7 @@ export function useChatSubmit({
                       return { ...m, alternatives: alts };
                     }),
                   );
-                  if (!userScrolledAwayRef.current) {
+                  if (!isMobile && !userScrolledAwayRef.current) {
                     requestAnimationFrame(() => scrollToBottom("smooth"));
                   }
                 } else if (currentEventType === "complete") {
