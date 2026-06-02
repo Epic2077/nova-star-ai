@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import type { Dispatch, SetStateAction } from "react";
 import { CameraIcon, PlusIcon, SendHorizontalIcon } from "lucide-react";
 import { Button } from "../ui/button";

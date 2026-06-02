@@ -125,6 +125,7 @@ export default function NovaProfileDashboard() {
           partnerProfile={data?.partnerProfile ?? null}
           partnerSeesYou={data?.partnerSeesYou ?? null}
           partnerName={data?.partnerName ?? null}
+          onRefresh={fetchData}
         />
       </TabsContent>
 

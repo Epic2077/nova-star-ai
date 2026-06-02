@@ -1,7 +1,7 @@
 "use client";
 
 import { dailyQuote } from "@/constant/dailyQuote";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 
 const DailyQuote = () => {
   return (

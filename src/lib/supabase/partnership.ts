@@ -7,7 +7,7 @@
  * Fallback chain for partner profile:
  * 1. Active partnership → load partner's `user_profiles` row
  * 2. No active partnership → load AI-built `partner_profiles` row
- * 3. Neither exists → return null (route.ts applies Shadi defaults or skips)
+ * 3. Neither exists → return null (route.ts  defaults or skips)
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -74,7 +74,7 @@ export function getPartnerId(
  * Fallback chain:
  * 1. Active partnership → partner's `user_profiles` row
  * 2. No active partnership → AI-built `partner_profiles` row
- * 3. Neither → `null` (route.ts handles Shadi defaults or skip)
+ * 3. Neither → `null` (route.ts  or skip)
  */
 export async function fetchPartnerProfile(
   supabase: SupabaseClient,

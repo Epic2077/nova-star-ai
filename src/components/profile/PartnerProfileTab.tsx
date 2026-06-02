@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -9,7 +10,8 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Heart, Link2, Bot, Sparkles, Eye } from "lucide-react";
+import { Heart, Link2, Bot, Sparkles, Eye, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import type {
   PartnerProfileRow,
   PartnerQuizAnswer,
@@ -22,6 +24,7 @@ interface Props {
   partnerProfile: PartnerProfileRow | null;
   partnerSeesYou: PartnerProfileRow | null;
   partnerName: string | null;
+  onRefresh?: () => void;
 }
 
 export default function PartnerProfileTab({
@@ -29,7 +32,34 @@ export default function PartnerProfileTab({
   partnerProfile,
   partnerSeesYou,
   partnerName,
+  onRefresh,
 }: Props) {
+  const [removing, setRemoving] = useState(false);
+
+  const handleRemove = async () => {
+    if (!partnerProfile) return;
+    setRemoving(true);
+    try {
+      const res = await fetch("/api/partner-profile", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: partnerProfile.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Failed to remove partner profile");
+      }
+      toast.success("Partner profile removed");
+      onRefresh?.();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to remove partner profile",
+      );
+    } finally {
+      setRemoving(false);
+    }
+  };
+
   // No partnership & no AI-built profile
   if (!partnership && !partnerProfile) {
     return (
@@ -154,6 +184,34 @@ export default function PartnerProfileTab({
                   <p className="text-sm whitespace-pre-line text-muted-foreground">
                     {partnerProfile.ai_notes}
                   </p>
+                </div>
+              </>
+            )}
+
+            {/* Remove the AI-built profile (e.g. after a relationship ends).
+                Only offered when this is not a linked partner account. */}
+            {!hasLinkedPartner && (
+              <>
+                <Separator />
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-xs text-muted-foreground">
+                    Not your partner anymore? Remove this profile and Nova will
+                    forget it.
+                  </p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleRemove}
+                    disabled={removing}
+                    className="shrink-0"
+                  >
+                    {removing ? (
+                      <Loader2 className="mr-2 size-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="mr-2 size-4" />
+                    )}
+                    Remove
+                  </Button>
                 </div>
               </>
             )}

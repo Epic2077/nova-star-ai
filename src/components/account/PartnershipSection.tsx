@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useUser } from "@/hooks/useUser";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +28,7 @@ import type { PartnershipWithPartner } from "@/types/partnership";
 
 export default function PartnershipSection() {
   const { user, isLoading: userLoading } = useUser();
+  const router = useRouter();
 
   const [partnership, setPartnership] = useState<PartnershipWithPartner | null>(
     null,
@@ -118,7 +120,20 @@ export default function PartnershipSection() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      // Clear the dissolved partnership and any related local state so the
+      // section immediately returns to the empty (Create / Join) state with
+      // no trace of the ex-partner.
       setPartnership(null);
+      setInviteInput("");
+      setCopied(false);
+      setCreating(false);
+      setJoining(false);
+
+      // Invalidate cached server-component data in sibling tabs (Nova
+      // Profile, Memories, Insights) that may still show the partner name.
+      router.refresh();
+
       toast.success("Partnership dissolved");
     } catch (err) {
       toast.error(

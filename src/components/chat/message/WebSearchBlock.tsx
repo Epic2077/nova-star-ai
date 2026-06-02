@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { ChevronRight, Globe, ExternalLink } from "lucide-react";
 import type { ToolResult } from "@/types/chat";
 

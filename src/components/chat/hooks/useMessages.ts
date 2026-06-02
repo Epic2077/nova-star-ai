@@ -39,14 +39,14 @@ export function useMessages(chatId: string | undefined) {
 
   // ── Realtime subscription & initial fetch ─────────────────────
   React.useEffect(() => {
-    let channel: RealtimeChannel | null = null;
+    if (!chatId) {
+      setMessages([]);
+      return;
+    }
+
+    let cancelled = false;
 
     const fetchMessages = async () => {
-      if (!chatId) {
-        setMessages([]);
-        return;
-      }
-
       let optimisticMsg: Message | null = null;
       try {
         const stored = sessionStorage.getItem(`optimistic-msg-${chatId}`);
@@ -62,6 +62,10 @@ export function useMessages(chatId: string | undefined) {
         .select("id, content, role, chat_id, created_at, type, metadata")
         .eq("chat_id", chatId)
         .order("created_at", { ascending: true });
+
+      // Effect was torn down (e.g. StrictMode remount or chat switch) before
+      // the query resolved — don't write stale state.
+      if (cancelled) return;
 
       if (error) {
         toast.error(error.message);
@@ -92,78 +96,83 @@ export function useMessages(chatId: string | undefined) {
         setMessages([]);
         setIsAwaitingResponse(false);
       }
-
-      // Subscribe to realtime message changes for this chat.
-      try {
-        channel = supabase
-          .channel(`public:messages:chat_id=eq.${chatId}`)
-          .on(
-            "postgres_changes",
-            {
-              event: "INSERT",
-              schema: "public",
-              table: "messages",
-              filter: `chat_id=eq.${chatId}`,
-            },
-            (payload) => {
-              const row = payload.new as MessageRecord;
-
-              try {
-                sessionStorage.removeItem(`optimistic-msg-${chatId}`);
-              } catch {
-                /* ignore */
-              }
-
-              setMessages((prev) => {
-                // avoid duplicates
-                if (prev.some((m) => m.id === row.id)) return prev;
-
-                const cleaned = prev.filter((m) => {
-                  if (typeof m.id === "string") {
-                    // When the real user message arrives, remove the temp placeholder
-                    if (m.id.startsWith("tmp-") && row.role === "user") {
-                      return false;
-                    }
-                    // When the real assistant row arrives, remove any
-                    // placeholder/streaming assistant message.
-                    if (
-                      (m.id.startsWith("failed-") ||
-                        m.id.startsWith("asst-temp-") ||
-                        m.id.startsWith("stream-")) &&
-                      m.role === "assistant" &&
-                      row.role === "assistant"
-                    ) {
-                      return false;
-                    }
-                  }
-                  return true;
-                });
-
-                return [
-                  ...cleaned,
-                  {
-                    id: row.id,
-                    content: row.content,
-                    role: row.role,
-                    type: row.type,
-                    metadata: row.metadata ?? undefined,
-                  },
-                ];
-              });
-
-              if (row.role === "assistant") setIsAwaitingResponse(false);
-              if (row.role === "user") setIsAwaitingResponse(true);
-            },
-          )
-          .subscribe();
-      } catch {
-        // ignore subscription errors
-      }
     };
 
     void fetchMessages();
 
+    // Subscribe synchronously (not inside the async fetch) so the cleanup
+    // below always has the channel reference to tear down. Creating it after
+    // an await meant StrictMode's mount→unmount→mount left the first
+    // subscription leaked because `channel` was still null at cleanup time.
+    let channel: RealtimeChannel | null = null;
+    try {
+      channel = supabase
+        .channel(`public:messages:chat_id=eq.${chatId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `chat_id=eq.${chatId}`,
+          },
+          (payload) => {
+            const row = payload.new as MessageRecord;
+
+            try {
+              sessionStorage.removeItem(`optimistic-msg-${chatId}`);
+            } catch {
+              /* ignore */
+            }
+
+            setMessages((prev) => {
+              // avoid duplicates
+              if (prev.some((m) => m.id === row.id)) return prev;
+
+              const cleaned = prev.filter((m) => {
+                if (typeof m.id === "string") {
+                  // When the real user message arrives, remove the temp placeholder
+                  if (m.id.startsWith("tmp-") && row.role === "user") {
+                    return false;
+                  }
+                  // When the real assistant row arrives, remove any
+                  // placeholder/streaming assistant message.
+                  if (
+                    (m.id.startsWith("failed-") ||
+                      m.id.startsWith("asst-temp-") ||
+                      m.id.startsWith("stream-")) &&
+                    m.role === "assistant" &&
+                    row.role === "assistant"
+                  ) {
+                    return false;
+                  }
+                }
+                return true;
+              });
+
+              return [
+                ...cleaned,
+                {
+                  id: row.id,
+                  content: row.content,
+                  role: row.role,
+                  type: row.type,
+                  metadata: row.metadata ?? undefined,
+                },
+              ];
+            });
+
+            if (row.role === "assistant") setIsAwaitingResponse(false);
+            if (row.role === "user") setIsAwaitingResponse(true);
+          },
+        )
+        .subscribe();
+    } catch {
+      // ignore subscription errors
+    }
+
     return () => {
+      cancelled = true;
       try {
         channel?.unsubscribe();
       } catch {
