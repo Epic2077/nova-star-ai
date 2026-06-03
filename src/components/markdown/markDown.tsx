@@ -295,7 +295,10 @@ function CodeBlockWithActions({
   };
 
   return (
-    <div className="my-6 rounded-2xl overflow-hidden border border-border shadow-xl group/code">
+    <div
+      dir="ltr"
+      className="my-6 rounded-2xl overflow-hidden border border-border shadow-xl group/code text-left"
+    >
       <div className="flex items-center justify-between px-4 py-2 text-xs bg-muted text-foreground border-b border-border">
         <span>{language}</span>
         <div className="flex items-center gap-1">
@@ -339,7 +342,13 @@ function CodeBlockWithActions({
         language={language}
         style={theme === "dark" ? stackoverflowDark : stackoverflowLight}
         PreTag="div"
-        customStyle={{ margin: 0, padding: "16px", fontSize: "0.9rem" }}
+        customStyle={{
+          margin: 0,
+          padding: "16px",
+          fontSize: "0.9rem",
+          direction: "ltr",
+          textAlign: "left",
+        }}
       >
         {codeText}
       </SyntaxHighlighter>
